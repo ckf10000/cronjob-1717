@@ -10,8 +10,8 @@
 # ---------------------------------------------------------------------------------------------------------
 """
 import json
-from .redis_helper import redis_client
 from typing import Optional, Dict, Any
+from .redis_helper import redis_client, redis_qlv_order_key
 from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
 
 """
@@ -84,7 +84,7 @@ def register(executor):
                 g.xxl_run_data.executorParams))
         if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
             data = resp_body.get("data")
-            await redis_client.set("qlv_order", data, ex=86400)
+            await redis_client.set(redis_qlv_order_key, data, ex=86400)
             return "task executed successfully"
             # order_id = data.get("id")
             # unlock_resp_body = await unlock_order(order_id=order_id)

@@ -53,3 +53,4 @@ class AsyncRedisHelper:
 
 
 redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
+redis_qlv_order_key: str = "qlv_order"

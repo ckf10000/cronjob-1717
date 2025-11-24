@@ -12,7 +12,7 @@
 import json
 from .redis_helper import redis_client
 from typing import Optional, Dict, Any
-from http_helper.client.async_proxy import HttpClientFactory
+from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
 
 """
 从劲旅平台抓取订单，存放至Redis中，存放有效时长86400秒(1天)
@@ -70,27 +70,27 @@ async def unlock_order(order_id: int) -> Optional[Dict[str, Any]]:
     )
 
 
+""""
+发生异常时，executor认为是任务执行失败，正常执行结束，executor认为是任务执行成功
+"""
 def register(executor):
     @executor.register(name="fetch_flight_order_to_redis_by_qlv")
     async def fetch_flight_order_to_redis_by_qlv():
         from pyxxl.ctx import g
         g.logger.info(
             f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % g.xxl_run_data.executorParams)
-        try:
-            resp_body = await lock_order(
-                **g.xxl_run_data.executorParams if isinstance(g.xxl_run_data.executorParams, dict) else json.loads(g.xxl_run_data.executorParams))
-            if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
-                data = resp_body.get("data")
-                await redis_client.set("qlv_order", data, ex=86400)
-                return "task executed successfully"
-                # order_id = data.get("id")
-                # unlock_resp_body = await unlock_order(order_id=order_id)
-                # if unlock_resp_body.get("code") == 200:
-                #     return "task executed successfully"
-                # else:
-                #     return unlock_resp_body
-            else:
-                return json.dumps(resp_body, ensure_ascii=False)
-        except Exception as e:
-            g.logger.error(f"[fetch_flight_order_to_redis_by_qlv] {e}")
-            return str(e)
+        resp_body = await lock_order(
+            **g.xxl_run_data.executorParams if isinstance(g.xxl_run_data.executorParams, dict) else json.loads(
+                g.xxl_run_data.executorParams))
+        if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
+            data = resp_body.get("data")
+            await redis_client.set("qlv_order", data, ex=86400)
+            return "task executed successfully"
+            # order_id = data.get("id")
+            # unlock_resp_body = await unlock_order(order_id=order_id)
+            # if unlock_resp_body.get("code") == 200:
+            #     return "task executed successfully"
+            # else:
+            #     return unlock_resp_body
+        else:
+            raise HttpClientError(json.dumps(resp_body, ensure_ascii=False))

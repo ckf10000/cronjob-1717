@@ -16,6 +16,6 @@ def register(executor):
     @executor.register(name="async_job")
     async def async_job(*args, **kwargs):
         from pyxxl.ctx import g
-        g.logger.info(f"[async_job] running with args params: {args}, kwargs params: {kwargs}")
+        g.logger.info(f"[async_job] running with executor params: %s" % g.xxl_run_data.executorParams)
         await asyncio.sleep(1)
         return "async done"

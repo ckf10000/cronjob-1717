@@ -9,11 +9,9 @@
 # Copyright ©2011-2025. Hunan xxxxxxx Company limited. All rights reserved.
 # ---------------------------------------------------------------------------------------------------------
 """
-
-
 def register(executor):
     @executor.register(name="sync_job")
-    def sync_job(*args, **kwargs):
+    def sync_job():
         from pyxxl.ctx import g
-        g.logger.info(f"[sync_job] running with args params: {args}, kwargs params: {kwargs}")
+        g.logger.info(f"[sync_job] running with executor params: %s" % g.xxl_run_data.executorParams)
         return "sync done"

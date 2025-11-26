@@ -10,8 +10,9 @@
 # ---------------------------------------------------------------------------------------------------------
 """
 import json
+from datetime import datetime
 from typing import Optional, Dict, Any
-from .redis_helper import redis_client, redis_qlv_order_key
+from .redis_helper import redis_client
 from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
 
 """
@@ -70,9 +71,21 @@ async def unlock_order(order_id: int) -> Optional[Dict[str, Any]]:
     )
 
 
+def general_key_vid(last_time_ticket: str) -> int:
+    last_time = datetime.strptime(last_time_ticket, '%Y-%m-%d %H:%M:%S')
+    delta = last_time - datetime.now()
+    seconds = delta.total_seconds()
+    if seconds >= 0:
+        return int(seconds)
+    else:
+        return 86400
+
+
 """"
 发生异常时，executor认为是任务执行失败，正常执行结束，executor认为是任务执行成功
 """
+
+
 def register(executor):
     @executor.register(name="fetch_flight_order_to_redis_by_qlv")
     async def fetch_flight_order_to_redis_by_qlv():
@@ -84,7 +97,21 @@ def register(executor):
                 g.xxl_run_data.executorParams))
         if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
             data = resp_body.get("data")
-            await redis_client.set(redis_qlv_order_key, data, ex=86400)
+            order_id = data.get("id")
+            flights = data.get("flights")
+            last_time_ticket = data.get("last_time_ticket")
+            # 只取第一段航程的数据作为key的关键信息
+            flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
+            dep_date = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep"), time_zone_step=8)
+            key_vid = general_key_vid(last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date)
+            await redis_client.set(
+                redis_client.gen_qlv_flight_order_key_prefix(
+                    dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
+                    extend=order_id
+                ),
+                data,
+                ex=key_vid
+            )
             return "task executed successfully"
             # order_id = data.get("id")
             # unlock_resp_body = await unlock_order(order_id=order_id)

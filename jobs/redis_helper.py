@@ -44,6 +44,18 @@ class AsyncRedisHelper:
             # 不是 json 就直接返回字符串
             return val
 
+    async def scan_keys_by_prefix(self, prefix: str):
+        cursor = 0
+        keys = []
+        pattern = f"{prefix}*"
+
+        while True:
+            cursor, batch = await self._r.scan(cursor=cursor, match=pattern, count=100)
+            keys.extend(batch)
+            if cursor == 0:
+                break
+        return keys
+
     async def delete(self, key: str):
         await self._r.delete(key)
 
@@ -51,6 +63,43 @@ class AsyncRedisHelper:
         await self._r.close()
         await self._r.connection_pool.disconnect()
 
+    @staticmethod
+    def gen_qlv_flight_order_key_prefix(dep_city: str = None, arr_city: str = None, dep_date: str = None,
+                                        extend: str = None) -> str:
+        # 格式： flight:order:[平台ID]:[departureCityCode]:[arrivalCityCode]:[日期]:[平台单号]
+        # 如：flight:order:qlv:szx:hgh:2025-12-01:153471
+        li = ["flight", "order", "qlv"]
+        if dep_city:
+            if isinstance(dep_city, str) is False:
+                dep_city = str(dep_city)
+            li.append(dep_city.lower())
+        if arr_city:
+            if isinstance(arr_city, str) is False:
+                arr_city = str(arr_city)
+            li.append(arr_city.lower())
+        if dep_date:
+            if isinstance(dep_date, str) is False:
+                dep_date = str(dep_date)
+            li.append(dep_date)
+        if extend:
+            if isinstance(extend, str) is False:
+                extend = str(extend)
+            li.append(extend)
+        return ":".join(li)
+
+    standard_date_format = "%Y-%m-%d %H:%M:%S"
+
+    @staticmethod
+    def iso_to_standard_datetimestr(datestr: str, time_zone_step: int) -> str:
+        """iso(2024-04-21T04:20:00Z)格式转 标准的时间格式(2024-01-01 00:00:00)"""
+        dt_str = "{} {}".format(datestr[:10], datestr[11:-1])
+        dt = datetime.strptime(dt_str, standard_date_format)
+        dt_step = dt + timedelta(hours=time_zone_step)
+        return dt_step.strftime(standard_date_format)
+
+    def iso_to_standard_datestr(self, datestr: str, time_zone_step: int) -> str:
+        """iso(2024-04-21T04:20:00Z)格式转 标准的时间格式(2024-01-01)"""
+        return self.iso_to_standard_datetimestr(datestr=datestr, time_zone_step=time_zone_step)[:10]
+
 
 redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
-redis_qlv_order_key: str = "qlv_order"

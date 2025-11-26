@@ -10,9 +10,11 @@
 # ---------------------------------------------------------------------------------------------------------
 """
 import json
-from datetime import datetime
 import redis.asyncio as redis
 from typing import Any, Union, Optional
+from datetime import datetime, timedelta
+
+standard_date_format = "%Y-%m-%d %H:%M:%S"
 
 
 class AsyncRedisHelper:
@@ -87,8 +89,6 @@ class AsyncRedisHelper:
                 extend = str(extend)
             li.append(extend)
         return ":".join(li)
-
-    standard_date_format = "%Y-%m-%d %H:%M:%S"
 
     @staticmethod
     def iso_to_standard_datetimestr(datestr: str, time_zone_step: int) -> str:

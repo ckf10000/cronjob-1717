@@ -112,12 +112,14 @@ def register(executor):
                 data,
                 ex=key_vid
             )
-            return "task executed successfully"
+            return "任务执行成功"
             # order_id = data.get("id")
             # unlock_resp_body = await unlock_order(order_id=order_id)
             # if unlock_resp_body.get("code") == 200:
             #     return "task executed successfully"
             # else:
             #     return unlock_resp_body
+        elif "无单可锁" in resp_body.get("message"):
+            return "任务执行完成, 劲旅平台无单可锁"
         else:
             raise HttpClientError(json.dumps(resp_body, ensure_ascii=False))

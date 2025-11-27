@@ -87,6 +87,8 @@ def register(executor):
             flight_no = flight.get("flight_no")
             price_std = people.get("price_std")
             price_sell = people.get("price_sell")
+            city_dep = flight.get("city_dep").strip() if flight.get("city_dep") else ""
+            city_arr = flight.get("city_arr").strip() if flight.get("city_arr") else ""
             code_dep = flight.get("code_dep").strip() if flight.get("code_dep") else ""
             code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
             dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
@@ -100,10 +102,10 @@ def register(executor):
                 order_list = data.get("orderList") or list()
                 if order_list:
                     g.logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
-                    url = f"https://flights.ctrip.com/online/list/oneway-{code_dep}-{code_arr}?_=1&depdate={dep_date}&cabin=Y_S_C_F"
+                    url = f"https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport={code_dep}&searchArrivalAirport={code_arr}&searchDepartureTime={dep_date}&searchArrivalTime={dep_date}&nextNDays=0&startSearch=true&fromCode={city_dep}&toCode={city_arr}&from=flight_dom_search&lowestPrice=null"
                     # 排序（默认升序）,reverse=False, sellPrice 外放底价， sellFloorPrice 外放追价底价
-                    sell_price_list = [x for x in order_list if price_std > x.get("sellPrice") > 0]
-                    wiew_price_list = [x for x in order_list if price_std > x.get("maxViewPrice") > 0]
+                    sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
+                    wiew_price_list = [x for x in order_list if price_sell > x.get("maxViewPrice") > 0]
                     if sell_price_list or wiew_price_list:
                         if sell_price_list:
                             sell_price_list.sort(key=lambda x: x["sellPrice"])

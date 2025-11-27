@@ -91,10 +91,10 @@ class AsyncRedisHelper:
         return ":".join(li)
 
     @staticmethod
-    def gen_qlv_flight_order_list_key() -> str:
-        return ":".join(["flight", "order", "qlv", "key", "list"])
+    def gen_qlv_flight_activity_order_list_key() -> str:
+        return ":".join(["list", "flight", "order", "qlv", "activity"])
 
-    async def lpush(self, key: str, *value: Any) -> bool:
+    async def lpush(self, key: str, value: Any) -> bool:
         """
         将元素插入到 Redis 列表的头部
         key: redis key

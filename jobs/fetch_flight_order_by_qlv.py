@@ -12,7 +12,7 @@
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any
-from .redis_helper import redis_client
+from jobs.redis_helper import redis_client
 from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
 
 """
@@ -81,6 +81,41 @@ def general_key_vid(last_time_ticket: str) -> int:
         return 86400
 
 
+async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = None, order_pk: int = 0,
+                             order_src_cat: str = None) -> str:
+    resp_body = await lock_order(
+        policy_name=policy_name, operator=operator, air_cos=air_cos, order_pk=order_pk, order_src_cat=order_src_cat
+    )
+    if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
+        data = resp_body.get("data")
+        order_id = data.get("id")
+        flights = data.get("flights")
+        last_time_ticket = data.get("last_time_ticket")
+        # 只取第一段航程的数据作为key的关键信息
+        flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
+        dep_date = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep"), time_zone_step=8)
+        key_vid = general_key_vid(
+            last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date
+        )
+        key = redis_client.gen_qlv_flight_order_key_prefix(
+            dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
+            extend=order_id
+        )
+        await redis_client.set(key=key, value=data, ex=key_vid)
+        await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
+        return "任务执行成功"
+        # order_id = data.get("id")
+        # unlock_resp_body = await unlock_order(order_id=order_id)
+        # if unlock_resp_body.get("code") == 200:
+        #     return "task executed successfully"
+        # else:
+        #     return unlock_resp_body
+    elif "无单可锁" in resp_body.get("message"):
+        return "任务执行完成, 劲旅平台无单可锁"
+    else:
+        raise HttpClientError(json.dumps(resp_body, ensure_ascii=False))
+
+
 """"
 发生异常时，executor认为是任务执行失败，正常执行结束，executor认为是任务执行成功
 """
@@ -92,34 +127,14 @@ def register(executor):
         from pyxxl.ctx import g
         g.logger.info(
             f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % g.xxl_run_data.executorParams)
-        resp_body = await lock_order(
-            **g.xxl_run_data.executorParams if isinstance(g.xxl_run_data.executorParams, dict) else json.loads(
-                g.xxl_run_data.executorParams))
-        if resp_body.get("code") == 200 and resp_body.get("data") and isinstance(resp_body.get("data"), dict):
-            data = resp_body.get("data")
-            order_id = data.get("id")
-            flights = data.get("flights")
-            last_time_ticket = data.get("last_time_ticket")
-            # 只取第一段航程的数据作为key的关键信息
-            flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
-            dep_date = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep"), time_zone_step=8)
-            key_vid = general_key_vid(
-                last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date
-            )
-            key = redis_client.gen_qlv_flight_order_key_prefix(
-                dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
-                extend=order_id
-            )
-            await redis_client.set(key=key, value=data, ex=key_vid)
-            await redis_client.lpush(key=redis_client.gen_qlv_flight_order_list_key(), value=key)
-            return "任务执行成功"
-            # order_id = data.get("id")
-            # unlock_resp_body = await unlock_order(order_id=order_id)
-            # if unlock_resp_body.get("code") == 200:
-            #     return "task executed successfully"
-            # else:
-            #     return unlock_resp_body
-        elif "无单可锁" in resp_body.get("message"):
-            return "任务执行完成, 劲旅平台无单可锁"
-        else:
-            raise HttpClientError(json.dumps(resp_body, ensure_ascii=False))
+        kwargs = g.xxl_run_data.executorParams if isinstance(g.xxl_run_data.executorParams, dict) else json.loads(
+            g.xxl_run_data.executorParams)
+        return await fetch_flight_order(**kwargs)
+
+
+if __name__ == '__main__':
+    import asyncio
+
+    asyncio.run(fetch_flight_order(
+        policy_name="TP>YJ-1", operator="周汗林", order_pk=158299
+    ))

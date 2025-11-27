@@ -11,10 +11,11 @@
 """
 import json
 import asyncio
-from .redis_helper import redis_client
+import logging
+from jobs.redis_helper import redis_client
 from typing import Optional, Dict, Any
 from http_helper.client.async_proxy import HttpClientFactory
-from .robot_message_template import get_fuwu_qunar_price_comparison_template, send_message_to_dingdin_robot
+from jobs.robot_message_template import get_fuwu_qunar_price_comparison_template, send_message_to_dingdin_robot
 
 """
 比价逻辑
@@ -72,18 +73,11 @@ async def fetch_tts_agent_tool_total(
     return response
 
 
-def register(executor):
-    @executor.register(name="fuwu_qunar_flight_price_comparison")
-    async def fuwu_qunar_flight_price_comparison():
-        from pyxxl.ctx import g
-        executor_params = g.xxl_run_data.executorParams if isinstance(
-            g.xxl_run_data.executorParams, dict
-        ) else json.loads(g.xxl_run_data.executorParams)
-        g.logger.info(
-            "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % g.xxl_run_data.executorParams)
-        key = await redis_client.rpop(key=redis_client.gen_qlv_flight_order_list_key())
-        if key:
-            cache_data = await redis_client.get(key)
+async def flight_price_comparison(logger: logging.Logger, uuid: str = None, headers: Dict[str, Any] = None) -> str:
+    key = await redis_client.rpop(key=redis_client.gen_qlv_flight_activity_order_list_key())
+    if key:
+        cache_data = await redis_client.get(key)
+        if cache_data:
             order_id = cache_data.get("id")
             flights = cache_data.get("flights")
             peoples = cache_data.get("peoples")
@@ -99,14 +93,13 @@ def register(executor):
             code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
             dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
             response = await fetch_tts_agent_tool_total(
-                flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date,
-                uuid=executor_params.get("uuid"), headers=executor_params.get("headers")
+                flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date, uuid=uuid, headers=headers
             )
             data = response.get("data") or dict()
             if data and isinstance(data, dict) and response.get("data").get("orderList"):
                 order_list = data.get("orderList") or list()
                 if order_list:
-                    g.logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
+                    logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
                     url = f"https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport={code_dep}&searchArrivalAirport={code_arr}&searchDepartureTime={dep_date}&searchArrivalTime={dep_date}&nextNDays=0&startSearch=true&fromCode={city_dep}&toCode={city_arr}&from=flight_dom_search&lowestPrice=null"
                     # 排序（默认升序）,reverse=False, sellPrice 外放底价， sellFloorPrice 外放追价底价
                     sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
@@ -128,19 +121,39 @@ def register(executor):
                     else:
                         min_price = "高于销售价"
                 else:
-                    g.logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
+                    logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
                     min_price = "无"
                 message = f"[fuwu_qunar_flight_price_comparison] 订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
-                g.logger.info(message)
+                logger.info(message)
             else:
                 message = str(response)
-                g.logger.error(message)
+                logger.error(message)
+            await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
             return message
         else:
-            return "Redis队列中没有询价数据"
+            return "超过订单查询有效期"
+    else:
+        return "Redis队列中没有询价数据"
+
+
+def register(executor):
+    @executor.register(name="fuwu_qunar_flight_price_comparison")
+    async def fuwu_qunar_flight_price_comparison():
+        from pyxxl.ctx import g
+        executor_params = g.xxl_run_data.executorParams if isinstance(
+            g.xxl_run_data.executorParams, dict
+        ) else json.loads(g.xxl_run_data.executorParams)
+        g.logger.info(
+            "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % g.xxl_run_data.executorParams)
+        return await flight_price_comparison(
+            logger=g.logger, uuid=executor_params.get("uuid"), headers=executor_params.get("headers")
+        )
 
 
 # 模块内不要直接调用 asyncio.run()，只提供 async 函数/async generator，让调用方决定如何调度。
 # 异步环境已经存在就直接 await，否则可以 asyncio.run()
 if __name__ == "__main__":
-    asyncio.run(fetch_tts_agent_tool_total(flight_no="HU7389", dpt="SZX", arr="HGH", flight_date="2025-12-17"))
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger("root")
+    # asyncio.run(fetch_tts_agent_tool_total(flight_no="HU7389", dpt="SZX", arr="HGH", flight_date="2025-12-17"))
+    asyncio.run(flight_price_comparison(logger=logger))

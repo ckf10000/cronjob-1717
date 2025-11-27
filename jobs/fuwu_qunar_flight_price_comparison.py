@@ -29,7 +29,7 @@ async def fetch_tts_agent_tool_total(
         protocol=fuwu_api_config.get('protocol'),
         domain=fuwu_api_config.get('address'),
         timeout=10,
-        retry=2,
+        retry=0,
         enable_log=True
     )
     uuid_default = "FYwHxRQZw8a4WcWF"

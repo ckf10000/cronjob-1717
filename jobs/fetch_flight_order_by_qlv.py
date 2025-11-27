@@ -103,15 +103,15 @@ def register(executor):
             # 只取第一段航程的数据作为key的关键信息
             flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
             dep_date = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep"), time_zone_step=8)
-            key_vid = general_key_vid(last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date)
-            await redis_client.set(
-                redis_client.gen_qlv_flight_order_key_prefix(
-                    dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
-                    extend=order_id
-                ),
-                data,
-                ex=key_vid
+            key_vid = general_key_vid(
+                last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date
             )
+            key = redis_client.gen_qlv_flight_order_key_prefix(
+                dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
+                extend=order_id
+            )
+            await redis_client.set(key=key, value=data, ex=key_vid)
+            await redis_client.lpush(key=redis_client.gen_qlv_flight_order_list_key(), value=key)
             return "任务执行成功"
             # order_id = data.get("id")
             # unlock_resp_body = await unlock_order(order_id=order_id)

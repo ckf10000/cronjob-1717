@@ -91,6 +91,40 @@ class AsyncRedisHelper:
         return ":".join(li)
 
     @staticmethod
+    def gen_qlv_flight_order_list_key() -> str:
+        return ":".join(["flight", "order", "qlv", "key", "list"])
+
+    async def lpush(self, key: str, *value: Any) -> bool:
+        """
+        将元素插入到 Redis 列表的头部
+        key: redis key
+        value: str, dict, list
+        """
+        # 如果是 dict/list，序列化成 json
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value, ensure_ascii=False)
+        # 将元素推入列表头部
+        await self._r.lpush(key, value)
+        return True
+
+    async def rpop(self, key: str) -> Union[str, dict, list, None]:
+        """
+        从 Redis 列表的尾部取出元素
+        key: redis key
+
+        返回值：返回列表中的一个元素，可能是 JSON 格式或者普通字符串
+        """
+        val = await self._r.rpop(key)
+        if val is None:
+            return None
+        try:
+            # 尝试反序列化 json
+            return json.loads(val)
+        except json.JSONDecodeError:
+            # 不是 json 格式就直接返回字符串
+            return val.decode("utf-8") if isinstance(val, bytes) else val  # 将字节串解码为字符串
+
+    @staticmethod
     def iso_to_standard_datetimestr(datestr: str, time_zone_step: int) -> str:
         """iso(2024-04-21T04:20:00Z)格式转 标准的时间格式(2024-01-01 00:00:00)"""
         dt_str = "{} {}".format(datestr[:10], datestr[11:-1])

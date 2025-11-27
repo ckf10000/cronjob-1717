@@ -16,6 +16,13 @@ from typing import Optional, Dict, Any
 from http_helper.client.async_proxy import HttpClientFactory
 from .robot_message_template import get_fuwu_qunar_price_comparison_template, send_message_to_dingdin_robot
 
+"""
+比价逻辑
+1. 从redis队列尾部中取出即将要比价的订单key，从K,V存储中取出订单详情
+2. 详情有值，调用去哪儿平台API比价；无值则扔掉key，直接结束任务
+3. 详情有值，订单key插入redis队列队首，无值则忽略此步骤
+"""
+
 fuwu_api_config = {
     "protocol": "https",
     "address": "fuwu.qunar.com"
@@ -74,9 +81,8 @@ def register(executor):
         ) else json.loads(g.xxl_run_data.executorParams)
         g.logger.info(
             "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % g.xxl_run_data.executorParams)
-        keys = await redis_client.scan_keys_by_prefix(prefix=redis_client.gen_qlv_flight_order_key_prefix())
-        messages = list()
-        for key in keys:
+        key = await redis_client.rpop(key=redis_client.gen_qlv_flight_order_list_key())
+        if key:
             cache_data = await redis_client.get(key)
             order_id = cache_data.get("id")
             flights = cache_data.get("flights")
@@ -98,7 +104,6 @@ def register(executor):
             )
             data = response.get("data") or dict()
             if data and isinstance(data, dict) and response.get("data").get("orderList"):
-                min_price = "无"
                 order_list = data.get("orderList") or list()
                 if order_list:
                     g.logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
@@ -120,15 +125,19 @@ def register(executor):
                         await send_message_to_dingdin_robot(
                             message=action_card_message, message_type="actionCard"
                         )
+                    else:
+                        min_price = "高于销售价"
                 else:
                     g.logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
+                    min_price = "无"
                 message = f"[fuwu_qunar_flight_price_comparison] 订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
                 g.logger.info(message)
             else:
                 message = str(response)
                 g.logger.error(message)
-            messages.append(message)
-        return ";<br/>".join(messages) if messages else "没有询价数据"
+            return message
+        else:
+            return "Redis队列中没有询价数据"
 
 
 # 模块内不要直接调用 asyncio.run()，只提供 async 函数/async generator，让调用方决定如何调度。

@@ -91,9 +91,12 @@ if __name__ == '__main__':
     slp = 120
     try:
         while True:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
-            asyncio.run(update_login_state())
-            sleep(slp)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
+            try:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
+                asyncio.run(update_login_state())
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
+                sleep(slp)
+            except Exception as e:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {e}")
     except (KeyboardInterrupt, Exception):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测已退出...")

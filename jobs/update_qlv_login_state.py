@@ -13,6 +13,7 @@ import json
 import asyncio
 import traceback
 from typing import Dict, Any
+from datetime import datetime
 from playwright_stealth import Stealth
 from jobs.redis_helper import redis_client
 from qlv_helper.po.login_page import LoginPage
@@ -73,6 +74,20 @@ async def update_login_state(cache_expired_duration: int = 86400) -> str:
             return f"检测到劲旅平台登录状态已过期，{result}"
 
 
+async def main_loop():
+    slp = 120
+
+    while True:
+        try:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
+            await update_login_state()
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
+            await asyncio.sleep(delay=slp)
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {traceback.format_exc()}")
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {e}")
+
+
 def register(executor):
     @executor.register(name="update_qlv_login_state")
     async def update_qlv_login_state():
@@ -86,19 +101,7 @@ def register(executor):
 
 
 if __name__ == '__main__':
-    from time import sleep
-    from datetime import datetime
-
-    slp = 120
     try:
-        while True:
-            try:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
-                asyncio.run(update_login_state())
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
-                sleep(slp)
-            except Exception as e:
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {traceback.format_exc()}")
-                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {e}")
+        asyncio.run(main_loop())
     except (KeyboardInterrupt, Exception):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测已退出...")

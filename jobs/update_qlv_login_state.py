@@ -71,7 +71,7 @@ async def update_login_state(cache_expired_duration: int = 86400) -> str:
         if is_success is True:
             return "检测到劲旅平台登录状态已过期，并已完成更新"
         else:
-            return f"检测到劲旅平台登录状态已过期，{result}"
+            raise RuntimeError(f"检测到劲旅平台登录状态已过期，{result}")
 
 
 async def main_loop():

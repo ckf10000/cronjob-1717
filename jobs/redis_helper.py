@@ -136,5 +136,9 @@ class AsyncRedisHelper:
         """iso(2024-04-21T04:20:00Z)格式转 标准的时间格式(2024-01-01)"""
         return self.iso_to_standard_datetimestr(datestr=datestr, time_zone_step=time_zone_step)[:10]
 
+    @staticmethod
+    def gen_qlv_login_state_key() -> str:
+        return ":".join(["qlv", "login", "state"])
+
 
 redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)

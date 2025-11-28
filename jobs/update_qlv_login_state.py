@@ -11,6 +11,7 @@
 """
 import json
 import asyncio
+import traceback
 from typing import Dict, Any
 from playwright_stealth import Stealth
 from jobs.redis_helper import redis_client
@@ -97,6 +98,7 @@ if __name__ == '__main__':
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
                 sleep(slp)
             except Exception as e:
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {traceback.format_exc()}")
                 print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {e}")
     except (KeyboardInterrupt, Exception):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测已退出...")

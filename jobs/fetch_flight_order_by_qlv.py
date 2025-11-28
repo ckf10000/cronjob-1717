@@ -125,11 +125,12 @@ def register(executor):
     @executor.register(name="fetch_flight_order_to_redis_by_qlv")
     async def fetch_flight_order_to_redis_by_qlv():
         from pyxxl.ctx import g
+        executor_params = g.xxl_run_data.executorParams if isinstance(
+            g.xxl_run_data.executorParams, dict
+        ) else json.loads(g.xxl_run_data.executorParams)
         g.logger.info(
-            f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % g.xxl_run_data.executorParams)
-        kwargs = g.xxl_run_data.executorParams if isinstance(g.xxl_run_data.executorParams, dict) else json.loads(
-            g.xxl_run_data.executorParams)
-        return await fetch_flight_order(**kwargs)
+            f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % executor_params)
+        return await fetch_flight_order(**executor_params)
 
 
 if __name__ == '__main__':

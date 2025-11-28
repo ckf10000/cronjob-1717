@@ -144,7 +144,7 @@ def register(executor):
             g.xxl_run_data.executorParams, dict
         ) else json.loads(g.xxl_run_data.executorParams)
         g.logger.info(
-            "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % g.xxl_run_data.executorParams)
+            "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % executor_params)
         return await flight_price_comparison(
             logger=g.logger, uuid=executor_params.get("uuid"), headers=executor_params.get("headers")
         )

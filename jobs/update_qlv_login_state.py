@@ -85,4 +85,10 @@ def register(executor):
 
 
 if __name__ == '__main__':
-    asyncio.run(update_login_state())
+    from time import sleep
+    from datetime import datetime
+
+    while True:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
+        asyncio.run(update_login_state())
+        sleep(120)

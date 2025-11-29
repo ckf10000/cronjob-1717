@@ -94,6 +94,10 @@ class AsyncRedisHelper:
     def gen_qlv_flight_activity_order_list_key() -> str:
         return ":".join(["list", "flight", "order", "qlv", "activity"])
 
+    @staticmethod
+    def gen_qlv_flight_order_state_list_key() -> str:
+        return ":".join(["list", "flight", "order", "qlv", "state"])
+
     async def lpush(self, key: str, value: Any) -> bool:
         """
         将元素插入到 Redis 列表的头部

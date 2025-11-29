@@ -103,6 +103,7 @@ async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = Non
         )
         await redis_client.set(key=key, value=data, ex=key_vid)
         await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
+        await redis_client.lpush(key=redis_client.gen_qlv_flight_order_state_list_key(), value=key)
         return "任务执行成功"
         # order_id = data.get("id")
         # unlock_resp_body = await unlock_order(order_id=order_id)

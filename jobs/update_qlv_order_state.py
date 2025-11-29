@@ -12,6 +12,7 @@
 import json
 import asyncio
 from typing import List
+from aiohttp import CookieJar
 from jobs.redis_helper import redis_client
 from qlv_helper.controller.order_detail import get_order_info_with_http
 

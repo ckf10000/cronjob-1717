@@ -14,21 +14,37 @@ import asyncio
 import traceback
 from typing import Dict, Any
 from datetime import datetime
+from aiohttp import CookieJar
 from playwright_stealth import Stealth
 from jobs.redis_helper import redis_client
 from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
 from qlv_helper.controller.user_login import wechat_login
+from qlv_helper.controller.main_page import get_main_info_with_http
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
 
+"""
+更新劲旅平台登录状态逻辑
+1. 从redis中获取登录状态信息
+2. 利用状态信息，打开订单详情页，看看能否正常返回详情页数据， 能返回说明登录状态有效，任务完成
+3. 若不能返回，则执行一次登录过程，若过程执行失败，抛异常
+4. 若过程执行成功，将状态数据写入redis，任务完成
+"""
 
-async def update_login_state(cache_expired_duration: int = 86400) -> str:
+
+async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: str = "https",
+                             cache_expired_duration: int = 86400) -> str:
     login_state: Dict[str, Any] = await redis_client.get(key=redis_client.gen_qlv_login_state_key())
-    if login_state:
-        return "检测到劲旅平台登录状态未过期，暂时无需更新"
-    login_url: str = "https://pekzhongqihl.qlv88.com/Home/Login"
-    timeout: float = 5.0
+    timeout: int = 5
     retry: int = 3
+    response: [str, Any] = await get_main_info_with_http(
+        domain=domain, protocol=protocol, retry=retry, timeout=timeout, enable_log=True,
+        cookie_jar=CookieJar(), playwright_state=login_state
+    )
+    if response.get('code') == 200 and "中企航旅航空科技有限公司 劲旅系统" in response.get('message').strip():
+        string = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态有效，任务跳过"
+        return string
+    login_url: str = "https://pekzhongqihl.qlv88.com/Home/Login"
     # 创建 stealth 配置
     stealth = Stealth(
         navigator_webdriver=True,  # 隐藏 webdriver
@@ -69,9 +85,9 @@ async def update_login_state(cache_expired_duration: int = 86400) -> str:
         await browser.close()
 
         if is_success is True:
-            return "检测到劲旅平台登录状态已过期，并已完成更新"
+            return "[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，并已完成更新"
         else:
-            raise RuntimeError(f"检测到劲旅平台登录状态已过期，{result}")
+            raise RuntimeError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，{result}")
 
 
 async def main_loop():
@@ -80,7 +96,8 @@ async def main_loop():
     while True:
         try:
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
-            await update_login_state()
+            result = await update_login_state()
+            print(result)
             print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
             await asyncio.sleep(delay=slp)
         except Exception as e:
@@ -97,7 +114,11 @@ def register(executor):
         ) else json.loads(g.xxl_run_data.executorParams)
         g.logger.info(
             f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % executor_params)
-        return await update_login_state(cache_expired_duration=executor_params.get("cache_expired_duration", 86400))
+        return await update_login_state(
+            domain=executor_params.get("domain", "pekzhongqihl.qlv88.com"),
+            protocol=executor_params.get("protocol", "https"),
+            cache_expired_duration=executor_params.get("cache_expired_duration", 86400)
+        )
 
 
 if __name__ == '__main__':

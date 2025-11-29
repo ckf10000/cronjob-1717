@@ -126,7 +126,7 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                 else:
                     logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
                     min_price = "无"
-                message = f"[fuwu_qunar_flight_price_comparison] 订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
+                message = f"劲旅订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
                 logger.info(message)
             else:
                 message = str(response)

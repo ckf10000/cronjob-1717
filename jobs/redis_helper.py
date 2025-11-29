@@ -47,6 +47,14 @@ class AsyncRedisHelper:
             # 不是 json 就直接返回字符串
             return val
 
+    async def expire(self, key: str, expire: int):
+        """ 为已存在的 key 设置过期时间"""
+        await self._r.expire(name=key, time=expire)
+
+    async def ttl(self, key: str) -> int:
+        """检查剩余时间"""
+        return await self._r.ttl(name=key)
+
     async def scan_keys_by_prefix(self, prefix: str):
         cursor = 0
         keys = []

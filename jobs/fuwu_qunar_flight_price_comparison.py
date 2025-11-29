@@ -12,9 +12,9 @@
 import json
 import asyncio
 import logging
-from jobs.redis_helper import redis_client
 from typing import Optional, Dict, Any
 from http_helper.client.async_proxy import HttpClientFactory
+from jobs.redis_helper import redis_client, activity_order_queue
 from jobs.robot_message_template import get_fuwu_qunar_price_comparison_template, send_message_to_dingdin_robot
 
 """
@@ -74,69 +74,68 @@ async def fetch_tts_agent_tool_total(
 
 
 async def flight_price_comparison(logger: logging.Logger, uuid: str = None, headers: Dict[str, Any] = None) -> str:
-    list_key = redis_client.gen_qlv_flight_activity_order_list_key()
-    key = await redis_client.rpop(key=list_key)
+    # 1. 恢复processing队列中的任务
+    await activity_order_queue.recover()
+    # 2. 从队尾取出（FIFO）
+    key = await activity_order_queue.pop()
     if key:
-        try:
-            cache_data = await redis_client.get(key)
-            if cache_data:
-                order_id = cache_data.get("id")
-                flights = cache_data.get("flights")
-                peoples = cache_data.get("peoples")
-                # 只取第一段航程的数据作为比价的检索数据
-                flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
-                people = peoples[0] if isinstance(peoples, list) and len(peoples) > 0 else dict()
-                flight_no = flight.get("flight_no")
-                price_std = people.get("price_std")
-                price_sell = people.get("price_sell")
-                city_dep = flight.get("city_dep").strip() if flight.get("city_dep") else ""
-                city_arr = flight.get("city_arr").strip() if flight.get("city_arr") else ""
-                code_dep = flight.get("code_dep").strip() if flight.get("code_dep") else ""
-                code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
-                dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
-                response = await fetch_tts_agent_tool_total(
-                    flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date, uuid=uuid, headers=headers
-                )
-                data = response.get("data") or dict()
-                if data and isinstance(data, dict) and response.get("data").get("orderList"):
-                    order_list = data.get("orderList") or list()
-                    if order_list:
-                        logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
-                        url = f"https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport={code_dep}&searchArrivalAirport={code_arr}&searchDepartureTime={dep_date}&searchArrivalTime={dep_date}&nextNDays=0&startSearch=true&fromCode={city_dep}&toCode={city_arr}&from=flight_dom_search&lowestPrice=null"
-                        # 排序（默认升序）,reverse=False, sellPrice 外放底价， sellFloorPrice 外放追价底价
-                        sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
-                        wiew_price_list = [x for x in order_list if price_sell > x.get("maxViewPrice") > 0]
-                        if sell_price_list or wiew_price_list:
-                            if sell_price_list:
-                                sell_price_list.sort(key=lambda x: x["sellPrice"])
-                                min_price = sell_price_list[0]["sellPrice"]
-                            else:
-                                wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
-                                min_price = wiew_price_list[0]["maxViewPrice"]
-                            action_card_message = get_fuwu_qunar_price_comparison_template(
-                                order_id=order_id, flight_no=flight_no, price_std=price_std,
-                                price_sell=price_sell, min_price=min_price, ctrip_url=url
-                            )
-                            await send_message_to_dingdin_robot(
-                                message=action_card_message, message_type="actionCard"
-                            )
+        cache_data = await redis_client.get(key)
+        if cache_data:
+            order_id = cache_data.get("id")
+            flights = cache_data.get("flights")
+            peoples = cache_data.get("peoples")
+            # 只取第一段航程的数据作为比价的检索数据
+            flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
+            people = peoples[0] if isinstance(peoples, list) and len(peoples) > 0 else dict()
+            flight_no = flight.get("flight_no")
+            price_std = people.get("price_std")
+            price_sell = people.get("price_sell")
+            city_dep = flight.get("city_dep").strip() if flight.get("city_dep") else ""
+            city_arr = flight.get("city_arr").strip() if flight.get("city_arr") else ""
+            code_dep = flight.get("code_dep").strip() if flight.get("code_dep") else ""
+            code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
+            dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
+            response = await fetch_tts_agent_tool_total(
+                flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date, uuid=uuid, headers=headers
+            )
+            data = response.get("data") or dict()
+            if data and isinstance(data, dict) and response.get("data").get("orderList"):
+                order_list = data.get("orderList") or list()
+                if order_list:
+                    logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
+                    url = f"https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport={code_dep}&searchArrivalAirport={code_arr}&searchDepartureTime={dep_date}&searchArrivalTime={dep_date}&nextNDays=0&startSearch=true&fromCode={city_dep}&toCode={city_arr}&from=flight_dom_search&lowestPrice=null"
+                    # 排序（默认升序）,reverse=False, sellPrice 外放底价， sellFloorPrice 外放追价底价
+                    sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
+                    wiew_price_list = [x for x in order_list if price_sell > x.get("maxViewPrice") > 0]
+                    if sell_price_list or wiew_price_list:
+                        if sell_price_list:
+                            sell_price_list.sort(key=lambda x: x["sellPrice"])
+                            min_price = sell_price_list[0]["sellPrice"]
                         else:
-                            min_price = "高于销售价"
+                            wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
+                            min_price = wiew_price_list[0]["maxViewPrice"]
+                        action_card_message = get_fuwu_qunar_price_comparison_template(
+                            order_id=order_id, flight_no=flight_no, price_std=price_std,
+                            price_sell=price_sell, min_price=min_price, ctrip_url=url
+                        )
+                        await send_message_to_dingdin_robot(
+                            message=action_card_message, message_type="actionCard"
+                        )
                     else:
-                        logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
-                        min_price = "无"
-                    message = f"[fuwu_qunar_flight_price_comparison] 订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
-                    logger.info(message)
+                        min_price = "高于销售价"
                 else:
-                    message = str(response)
-                    logger.error(message)
-                await redis_client.lpush(key=list_key, value=key)
-                return message
+                    logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
+                    min_price = "无"
+                message = f"[fuwu_qunar_flight_price_comparison] 订单：{order_id}，航班：{flight_no}，乘客票面价：{price_std}，销售价：{price_sell}，航班实时最低价：{min_price}"
+                logger.info(message)
             else:
-                return "超过订单查询有效期"
-        except Exception as e:
-            await redis_client.lpush(key=list_key, value=key)
-            raise RuntimeError(str(e))
+                message = str(response)
+                logger.error(message)
+            await activity_order_queue.requeue(task=key)
+            return message
+        else:
+            await activity_order_queue.finish(task=key)
+            return "超过订单查询有效期"
     else:
         return "Redis队列中没有询价数据"
 

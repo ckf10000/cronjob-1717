@@ -12,8 +12,8 @@
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any
-from jobs.redis_helper import redis_client
 from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
+from jobs.redis_helper import redis_client, activity_order_queue, order_state_queue
 
 """
 从劲旅平台抓取订单，存放至Redis中，存放有效时长86400秒(1天)
@@ -102,8 +102,11 @@ async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = Non
             extend=order_id
         )
         await redis_client.set(key=key, value=data, ex=key_vid)
-        await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
-        await redis_client.lpush(key=redis_client.gen_qlv_flight_order_state_list_key(), value=key)
+        # await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
+        # await redis_client.lpush(key=redis_client.gen_qlv_flight_order_state_list_key(), value=key)
+        # 生产者
+        await activity_order_queue.add(task=key)  # 原本是 LPUSH 到 activity 队列
+        await order_state_queue.add(task=key)  # 原本是 LPUSH 到 order 队列
         return "任务执行成功"
         # order_id = data.get("id")
         # unlock_resp_body = await unlock_order(order_id=order_id)
@@ -138,5 +141,5 @@ if __name__ == '__main__':
     import asyncio
 
     asyncio.run(fetch_flight_order(
-        policy_name="TP>YJ-1", operator="周汗林", order_pk=158299
+        policy_name="TP>YJ-1", operator="周汗林", order_pk=161181
     ))

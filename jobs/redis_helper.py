@@ -21,6 +21,10 @@ class AsyncRedisHelper:
     def __init__(self, **kwargs):
         self._r = redis.Redis(**kwargs)
 
+    @property
+    def redis(self) -> redis.Redis:
+        return self._r
+
     async def set(self, key: str, value: Any, ex: Optional[int] = None, px: Optional[int] = None, **kwargs):
         """
         写入redis
@@ -100,11 +104,11 @@ class AsyncRedisHelper:
 
     @staticmethod
     def gen_qlv_flight_activity_order_list_key() -> str:
-        return ":".join(["list", "flight", "order", "qlv", "activity"])
+        return ":".join(["flight", "order", "qlv", "activity"])
 
     @staticmethod
     def gen_qlv_flight_order_state_list_key() -> str:
-        return ":".join(["list", "flight", "order", "qlv", "state"])
+        return ":".join(["flight", "order", "qlv", "state"])
 
     async def lpush(self, key: str, value: Any) -> bool:
         """
@@ -153,4 +157,66 @@ class AsyncRedisHelper:
         return ":".join(["qlv", "login", "state"])
 
 
+class AsyncReliableQueue:
+    """
+    循环可靠队列（适合 Cron/定时任务）
+    """
+
+    def __init__(self, redis: redis.Redis, key: str):
+        self.redis = redis
+        self.pending = ":".join(["queue", "pending", key])
+        self.processing = ":".join(["queue", "processing", key])
+
+        # 使用 Lua 做 pop（原子操作）
+        self.pop_script = redis.register_script("""
+        -- 从队尾取出
+        local task = redis.call('RPOP', KEYS[1])
+        if not task then
+            return nil
+        end
+        -- 放入 processing
+        redis.call('LPUSH', KEYS[2], task)
+        return task
+        """)
+
+    async def add(self, task: str) -> None:
+        """生产者：插入队首（FIFO 原生支持）"""
+        await self.redis.lpush(self.pending, task)
+
+    async def pop(self) -> Optional[str]:
+        """消费者：FIFO 从队尾取出任务，并放入 processing（原子操作）"""
+        return await self.pop_script(keys=[self.pending, self.processing], args=[])
+
+    async def finish(self, task: str):
+        """任务完成：从 processing 中删除"""
+        await self.redis.lrem(self.processing, 1, task)
+
+    async def requeue(self, task: str):
+        """任务回队首：从 processing 删除 → 回 pending 队首"""
+        pipe = self.redis.pipeline()
+        await pipe.lrem(self.processing, 1, task)
+        await pipe.lpush(self.pending, task)
+        await pipe.execute()
+
+    async def recover(self):
+        """恢复崩溃中的任务：processing → pending 队首"""
+        tasks = await self.redis.lrange(self.processing, 0, -1)
+        if not tasks:
+            return 0
+
+        pipe = self.redis.pipeline()
+        for t in tasks:
+            await pipe.lrem(self.processing, 1, t)
+            await pipe.lpush(self.pending, t)
+        await pipe.execute()
+
+        return len(tasks)
+
+
 redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
+activity_order_queue = AsyncReliableQueue(
+    redis=redis_client.redis, key=redis_client.gen_qlv_flight_activity_order_list_key()
+)
+order_state_queue = AsyncReliableQueue(
+    redis=redis_client.redis, key=redis_client.gen_qlv_flight_order_state_list_key()
+)

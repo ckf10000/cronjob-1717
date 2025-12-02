@@ -105,24 +105,43 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                     logger.info(f"[fuwu_qunar_flight_price_comparison] 已检索到航班{flight_no}数据")
                     url = f"https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport={code_dep}&searchArrivalAirport={code_arr}&searchDepartureTime={dep_date}&searchArrivalTime={dep_date}&nextNDays=0&startSearch=true&fromCode={city_dep}&toCode={city_arr}&from=flight_dom_search&lowestPrice=null"
                     # 排序（默认升序）,reverse=False, sellPrice 外放底价， sellFloorPrice 外放追价底价
-                    sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
-                    wiew_price_list = [x for x in order_list if price_sell > x.get("maxViewPrice") > 0]
-                    if sell_price_list or wiew_price_list:
-                        if sell_price_list:
-                            sell_price_list.sort(key=lambda x: x["sellPrice"])
-                            min_price = sell_price_list[0]["sellPrice"]
+                    low_sell_price_list = [x for x in order_list if price_sell > x.get("sellPrice") > 0]
+                    low_view_price_list = [x for x in order_list if price_sell > x.get("maxViewPrice") > 0]
+                    high_sell_price_list = [x for x in order_list if x.get("sellPrice") > price_sell]
+                    high_wiew_price_list = [x for x in order_list if x.get("maxViewPrice") > price_sell]
+                    if low_sell_price_list or low_view_price_list:
+                        if low_sell_price_list:
+                            low_sell_price_list.sort(key=lambda x: x["sellPrice"])
+                            min_price = low_sell_price_list[0]["sellPrice"]
                         else:
-                            wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
-                            min_price = wiew_price_list[0]["maxViewPrice"]
+                            low_view_price_list.sort(key=lambda x: x["maxViewPrice"])
+                            min_price = low_view_price_list[0]["maxViewPrice"]
+                        extend_msg = f"{min_price}\n\n**降价**: {price_sell - min_price}"
                         action_card_message = get_fuwu_qunar_price_comparison_template(
                             order_id=order_id, flight_no=flight_no, price_std=price_std,
-                            price_sell=price_sell, min_price=min_price, ctrip_url=url
+                            price_sell=price_sell, min_price=extend_msg, ctrip_url=url
+                        )
+                        await send_message_to_dingdin_robot(
+                            message=action_card_message, message_type="actionCard"
+                        )
+                    elif high_sell_price_list or high_wiew_price_list:
+                        if high_sell_price_list:
+                            high_sell_price_list.sort(key=lambda x: x["sellPrice"])
+                            min_price = low_sell_price_list[0]["sellPrice"]
+                        else:
+                            high_wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
+                            min_price = high_wiew_price_list[0]["maxViewPrice"]
+                        extend_msg = f"{min_price}\n\n**涨价**: {min_price - price_sell}"
+                        action_card_message = get_fuwu_qunar_price_comparison_template(
+                            order_id=order_id, flight_no=flight_no, price_std=price_std,
+                            price_sell=price_sell, min_price=extend_msg, ctrip_url=url
                         )
                         await send_message_to_dingdin_robot(
                             message=action_card_message, message_type="actionCard"
                         )
                     else:
-                        min_price = "高于销售价"
+                        logger.warning(f"[fuwu_qunar_flight_price_comparison] 比价平台报告与航班销售价持平")
+                        min_price = "无"
                 else:
                     logger.warning(f"[fuwu_qunar_flight_price_comparison] 没有检索到航班{flight_no}数据")
                     min_price = "无"

@@ -67,7 +67,7 @@ def get_ctrip_price_comparison_template(
     }
 
 def get_fuwu_qunar_price_comparison_template(
-        order_id: int, flight_no: str, price_std: float, price_sell: float, min_price: float, ctrip_url: str
+        order_id: int, flight_no: str, price_std: float, price_sell: float, min_price: str, ctrip_url: str
 ) -> Dict[str, Any]:
     qlv_url = f"https://pekzhongqihl.qlv88.com/OrderProcessing/NewTicket_show/{order_id}?&r={get_current_dtstr()}"
     return {

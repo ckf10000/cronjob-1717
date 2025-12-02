@@ -116,7 +116,7 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                         else:
                             low_view_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = low_view_price_list[0]["maxViewPrice"]
-                        extend_msg = f"{min_price}\n\n**降价**: {price_sell - min_price}"
+                        extend_msg = f"{min_price}\n\n**降价**: {round(price_sell - min_price, 1)}"
                         action_card_message = get_fuwu_qunar_price_comparison_template(
                             order_id=order_id, flight_no=flight_no, price_std=price_std,
                             price_sell=price_sell, min_price=extend_msg, ctrip_url=url
@@ -131,7 +131,7 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                         else:
                             high_wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = high_wiew_price_list[0]["maxViewPrice"]
-                        extend_msg = f"{min_price}\n\n**涨价**: {min_price - price_sell}"
+                        extend_msg = f"{min_price}\n\n**涨价**: {round(min_price - price_sell, 1)}"
                         action_card_message = get_fuwu_qunar_price_comparison_template(
                             order_id=order_id, flight_no=flight_no, price_std=price_std,
                             price_sell=price_sell, min_price=extend_msg, ctrip_url=url
@@ -152,6 +152,7 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                 logger.error(message)
             await activity_order_queue.requeue(task=key)
             return message
+
         else:
             await activity_order_queue.finish(task=key)
             return "超过订单查询有效期"

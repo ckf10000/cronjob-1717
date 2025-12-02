@@ -80,7 +80,7 @@ async def get_flight_activity_order_by_qlv(logger: Logger, domain: str, protocol
             remaining_time = activity_order.get("remaining_time")
             key = redis_client.gen_qlv_flight_order_key_prefix(
                 dep_city=activity_order.get("code_dep"), arr_city=activity_order.get("code_arr"),
-                dep_date=activity_order.get("date_dep")[:10], extend=order_id
+                dep_date=activity_order.get("dat_dep")[:10], extend=order_id
             )
             cache_data = await redis_client.get(key)
             if cache_data:

@@ -87,7 +87,10 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
             # 只取第一段航程的数据作为比价的检索数据
             flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
             people = peoples[0] if isinstance(peoples, list) and len(peoples) > 0 else dict()
-            flight_no = flight.get("flight_no")
+            if flight.get("flight_no"):
+                flight_no = flight.get("flight_no")
+            else:
+                flight_no = cache_data.get("flight_no")
             price_std = people.get("price_std")
             price_sell = people.get("price_sell")
             city_dep = flight.get("city_dep").strip() if flight.get("city_dep") else ""

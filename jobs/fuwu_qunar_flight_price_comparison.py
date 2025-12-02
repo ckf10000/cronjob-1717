@@ -73,7 +73,10 @@ async def fetch_tts_agent_tool_total(
     return response
 
 
-async def flight_price_comparison(logger: logging.Logger, uuid: str = None, headers: Dict[str, Any] = None) -> str:
+async def flight_price_comparison(
+        logger: logging.Logger, uuid: str = None, headers: Dict[str, Any] = None, low_threshold: int = 0,
+        high_threshold: int = 0
+) -> str:
     # 1. 恢复processing队列中的任务
     await activity_order_queue.recover()
     # 2. 从队尾取出（FIFO）
@@ -122,14 +125,18 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                         else:
                             low_view_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = low_view_price_list[0]["maxViewPrice"]
-                        extend_msg = f"{min_price}\n\n**降价**: {round(price_sell - min_price, 1)}"
-                        action_card_message = get_fuwu_qunar_price_comparison_template(
-                            order_id=order_id, flight_no=flight_no, price_std=price_std,
-                            price_sell=price_sell, min_price=extend_msg, ctrip_url=url
-                        )
-                        await send_message_to_dingdin_robot(
-                            message=action_card_message, message_type="actionCard"
-                        )
+                        reduction_price = round(price_sell - min_price, 1)
+                        if reduction_price > low_threshold:
+                            extend_msg = f"{min_price}\n\n**降价**: {reduction_price}"
+                            action_card_message = get_fuwu_qunar_price_comparison_template(
+                                order_id=order_id, flight_no=flight_no, price_std=price_std,
+                                price_sell=price_sell, min_price=extend_msg, ctrip_url=url
+                            )
+                            await send_message_to_dingdin_robot(
+                                message=action_card_message, message_type="actionCard"
+                            )
+                        else:
+                            min_price = f"{min_price}，降价: {reduction_price}，小于或等于降价阈值: {low_threshold}，不报告警"
                     elif high_sell_price_list or high_wiew_price_list:
                         if high_sell_price_list:
                             high_sell_price_list.sort(key=lambda x: x["sellPrice"])
@@ -137,14 +144,18 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                         else:
                             high_wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = high_wiew_price_list[0]["maxViewPrice"]
-                        extend_msg = f"{min_price}\n\n**涨价**: {round(min_price - price_sell, 1)}"
-                        action_card_message = get_fuwu_qunar_price_comparison_template(
-                            order_id=order_id, flight_no=flight_no, price_std=price_std,
-                            price_sell=price_sell, min_price=extend_msg, ctrip_url=url
-                        )
-                        await send_message_to_dingdin_robot(
-                            message=action_card_message, message_type="actionCard"
-                        )
+                        increase_price = round(min_price - price_sell, 1)
+                        if increase_price > high_threshold:
+                            extend_msg = f"{min_price}\n\n**涨价**: {increase_price}"
+                            action_card_message = get_fuwu_qunar_price_comparison_template(
+                                order_id=order_id, flight_no=flight_no, price_std=price_std,
+                                price_sell=price_sell, min_price=extend_msg, ctrip_url=url
+                            )
+                            await send_message_to_dingdin_robot(
+                                message=action_card_message, message_type="actionCard"
+                            )
+                        else:
+                            min_price = f"{min_price}，涨价: {increase_price}，小于或等于涨价阈值: {high_threshold}，不报告警"
                     else:
                         logger.warning(f"[fuwu_qunar_flight_price_comparison] 比价平台报告与航班销售价持平")
                         min_price = "无"
@@ -176,7 +187,8 @@ def register(executor):
         g.logger.info(
             "[fuwu_qunar_flight_price_comparison] running with executor params: %s" % executor_params)
         return await flight_price_comparison(
-            logger=g.logger, uuid=executor_params.get("uuid"), headers=executor_params.get("headers")
+            logger=g.logger, uuid=executor_params.get("uuid"), headers=executor_params.get("headers"),
+            low_threshold=executor_params.get("low_threshold"), high_threshold=executor_params.get("high_threshold")
         )
 
 

@@ -127,7 +127,7 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
                     elif high_sell_price_list or high_wiew_price_list:
                         if high_sell_price_list:
                             high_sell_price_list.sort(key=lambda x: x["sellPrice"])
-                            min_price = low_sell_price_list[0]["sellPrice"]
+                            min_price = high_sell_price_list[0]["sellPrice"]
                         else:
                             high_wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = high_wiew_price_list[0]["maxViewPrice"]

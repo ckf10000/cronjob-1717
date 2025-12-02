@@ -10,7 +10,6 @@
 # ---------------------------------------------------------------------------------------------------------
 """
 import json
-from datetime import datetime
 from typing import Optional, Dict, Any
 from http_helper.client.async_proxy import HttpClientFactory, HttpClientError
 from jobs.redis_helper import redis_client, activity_order_queue, order_state_queue
@@ -71,16 +70,6 @@ async def unlock_order(order_id: int) -> Optional[Dict[str, Any]]:
     )
 
 
-def general_key_vid(last_time_ticket: str) -> int:
-    last_time = datetime.strptime(last_time_ticket, '%Y-%m-%d %H:%M:%S')
-    delta = last_time - datetime.now()
-    seconds = delta.total_seconds()
-    if seconds >= 0:
-        return int(seconds)
-    else:
-        return 86400
-
-
 async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = None, order_pk: int = 0,
                              order_src_cat: str = None) -> str:
     resp_body = await lock_order(
@@ -94,7 +83,7 @@ async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = Non
         # 只取第一段航程的数据作为key的关键信息
         flight = flights[0] if isinstance(flights, list) and len(flights) > 0 else dict()
         dep_date = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep"), time_zone_step=8)
-        key_vid = general_key_vid(
+        key_vid = redis_client.general_key_vid(
             last_time_ticket=last_time_ticket if last_time_ticket and len(last_time_ticket) > 0 else dep_date
         )
         key = redis_client.gen_qlv_flight_order_key_prefix(

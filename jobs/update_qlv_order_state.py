@@ -83,6 +83,9 @@ async def update_order_state(
     order_info["stat_order"] = stat_order
     order_info["stat_opration"] = stat_opration
     ttl = await redis_client.ttl(key=key)
+    if ttl < 1:
+        last_time_ticket = order_info.get("last_time_ticket")
+        ttl = redis_client.general_key_vid(last_time_ticket=last_time_ticket)
     await redis_client.set(key=key, value=order_info, ex=ttl)
     # 4. key还需要继续使用，重新扔回队列
     await order_state_queue.requeue(task=key)

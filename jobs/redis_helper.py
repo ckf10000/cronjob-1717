@@ -156,6 +156,16 @@ class AsyncRedisHelper:
     def gen_qlv_login_state_key() -> str:
         return ":".join(["qlv", "login", "state"])
 
+    @staticmethod
+    def general_key_vid(last_time_ticket: str) -> int:
+        last_time = datetime.strptime(last_time_ticket, '%Y-%m-%d %H:%M:%S')
+        delta = last_time - datetime.now()
+        seconds = delta.total_seconds()
+        if seconds >= 0:
+            return int(seconds)
+        else:
+            return 86400
+
 
 class AsyncReliableQueue:
     """

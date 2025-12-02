@@ -94,7 +94,10 @@ async def flight_price_comparison(logger: logging.Logger, uuid: str = None, head
             city_arr = flight.get("city_arr").strip() if flight.get("city_arr") else ""
             code_dep = flight.get("code_dep").strip() if flight.get("code_dep") else ""
             code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
-            dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
+            if flight.get("dat_dep"):
+                dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
+            else:
+                dep_date = cache_data.get("date_dep")[:10]
             response = await fetch_tts_agent_tool_total(
                 flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date, uuid=uuid, headers=headers
             )

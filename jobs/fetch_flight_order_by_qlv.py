@@ -101,19 +101,17 @@ async def fetch_flight_order(policy_name: str, operator: str, air_cos: str = Non
             dep_city=flight.get("code_dep"), arr_city=flight.get("code_arr"), dep_date=dep_date[:10],
             extend=order_id
         )
-        await redis_client.set(key=key, value=data, ex=key_vid)
-        # await redis_client.lpush(key=redis_client.gen_qlv_flight_activity_order_list_key(), value=key)
-        # await redis_client.lpush(key=redis_client.gen_qlv_flight_order_state_list_key(), value=key)
-        # 生产者
-        await activity_order_queue.add(task=key)  # 原本是 LPUSH 到 activity 队列
-        await order_state_queue.add(task=key)  # 原本是 LPUSH 到 order 队列
-        return "任务执行成功"
-        # order_id = data.get("id")
-        # unlock_resp_body = await unlock_order(order_id=order_id)
-        # if unlock_resp_body.get("code") == 200:
-        #     return "task executed successfully"
-        # else:
-        #     return unlock_resp_body
+        cache_data = await redis_client.get(key)
+        if cache_data:
+            return f'任务执行完成, 劲旅订单：{cache_data.get("id")} 详情数据已经存在于redis中'
+        else:
+            await redis_client.set(key=key, value=data, ex=key_vid)
+            # 生产者
+            # await activity_order_queue.add(task=key)  # 原本是 LPUSH 到 activity 队列
+            # await order_state_queue.add(task=key)  # 原本是 LPUSH 到 order 队列
+            await activity_order_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 activity 队列
+            await order_state_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 order 队列
+            return "任务执行成功"
     elif "无单可锁" in resp_body.get("message"):
         return "任务执行完成, 劲旅平台无单可锁"
     else:

@@ -179,6 +179,17 @@ class AsyncReliableQueue:
         return task
         """)
 
+    async def lpush_if_not_exists(self, task: str):
+        CHECK_AND_PUSH = """
+        local exist = redis.call('LPOS', KEYS[1], ARGV[1])
+        if not exist then
+            return redis.call('LPUSH', KEYS[1], ARGV[1])
+        else
+            return 0
+        end
+        """
+        return await self.redis.eval(CHECK_AND_PUSH, 1, self.pending, task)
+
     async def add(self, task: str) -> None:
         """生产者：插入队首（FIFO 原生支持）"""
         await self.redis.lpush(self.pending, task)

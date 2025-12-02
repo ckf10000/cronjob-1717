@@ -63,14 +63,14 @@ async def update_order_state(
     )
     """"
     消息结构：
-    {'code': 200, 'message': '订单出票查看', 'data': {'OTA实收': '1952.70', '佣金': '0.00', '订单号': '160669', '平台订单号': '[4646735080-4646735080]', '行程类型': '单程', '订单状态': '待处理', '订单操作': '收款完成'}}
+    {'code': 200, 'message': '订单出票查看', 'data': {'receipted_ota': 645.9, 'kickback': 0, 'id': 155715, 'raw_order_no': '4624992464-4624992464', 'trip_type': '单程', 'stat_order': '待处理', 'stat_opration': '收款完成', 'flights': [{'ticket_state': '未出票', 'p_name': '李晓璐', 'p_type': '成人', 'id_type': '身份证', 'id_no': '420103198310012461', 'birth_day': '1983-10-01', 'age': 42, 'gender': '女', 'new_nation': 'CN|中国', 'card_issue_place': 'CN|中国', 'id_valid_dat': '1900-01-01', 'price_std': 600, 'price_sell': 575.9, 'tax_air': 50, 'tax_fuel': 20, 'pnr': 'XE小(000000) 大(000000)【 RT 】【 PAT 】【 RTC 】', 'code_dep': 'SYX', 'code_arr': 'TYN', 'ticket_no': ''}], 'peoples': [{'ticket_state': '未出票', 'p_name': '李晓璐', 'p_type': '成人', 'id_type': '身份证', 'id_no': '420103198310012461', 'birth_day': '1983-10-01', 'age': 42, 'gender': '女', 'new_nation': 'CN|中国', 'card_issue_place': 'CN|中国', 'id_valid_dat': '1900-01-01', 'price_std': 600, 'price_sell': 575.9, 'tax_air': 50, 'tax_fuel': 20, 'pnr': 'XE小(000000) 大(000000)【 RT 】【 PAT 】【 RTC 】', 'code_dep': 'SYX', 'code_arr': 'TYN', 'ticket_no': ''}]}}
     """
     if response.get("code") != 200 or response.get("message") != "订单出票查看":
         await order_state_queue.requeue(task=key)
         raise RuntimeError(str(response))
     data = response.get("data")
-    stat_order = data.get("订单状态")
-    stat_opration = data.get("订单操作")
+    stat_order = data.get("stat_order")
+    stat_opration = data.get("stat_opration")
     if not stat_order or not stat_opration:
         await order_state_queue.requeue(task=key)
         raise RuntimeError(f"劲旅订单：{order_id}，详情页面数据解析异常")

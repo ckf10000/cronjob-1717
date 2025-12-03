@@ -22,6 +22,9 @@ message_api_config = {
 def get_current_dtstr() -> str:
     return datetime.now().strftime("%Y%m%d%H%M%S")
 
+def get_current_datetimestr() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
 async def send_message_to_dingdin_robot(
         message: Dict[str, Any], message_type: str, robot: Optional[Dict[str, Any]] = None
@@ -52,7 +55,7 @@ def get_ctrip_price_comparison_template(
     qlv_url = f"https://pekzhongqihl.qlv88.com/OrderProcessing/NewTicket_show/{order_id}?&r={get_current_dtstr()}"
     return {
         "title": f"航班【{flight_no}】价格有变动",
-        "text": f"## 基本信息\n\n\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前携程平台最低价**：{min_price}",
+        "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前携程平台最低价**：{min_price}",
         "btnOrientation": "0",
         "btns": [
             {
@@ -72,7 +75,7 @@ def get_fuwu_qunar_price_comparison_template(
     qlv_url = f"https://pekzhongqihl.qlv88.com/OrderProcessing/NewTicket_show/{order_id}?&r={get_current_dtstr()}"
     return {
         "title": f"航班【{flight_no}】价格有变动",
-        "text": f"## 基本信息\n\n\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前去哪儿平台最低价**：{min_price}",
+        "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前去哪儿平台最低价**：{min_price}",
         "btnOrientation": "0",
         "btns": [
             {

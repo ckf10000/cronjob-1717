@@ -104,9 +104,13 @@ def register(executor):
         return await update_order_state(
             domain=executor_params.get("domain", "pekzhongqihl.qlv88.com"),
             protocol=executor_params.get("protocol", "https"),
-            discard_state=executor_params.get("discard_state", ["出票完成"])
+            discard_state=executor_params.get("discard_state", ["出票完成", "出票成功", "已作废"])
         )
 
 
 if __name__ == '__main__':
-    asyncio.run(update_order_state(discard_state=["出票完成"]))
+    asyncio.run(update_order_state(discard_state=[
+        "出票完成",
+        "出票成功",
+        "已作废"
+    ]))

@@ -130,7 +130,7 @@ async def flight_price_comparison(
                             extend_msg = f"{min_price}\n\n**降价**: {reduction_price}"
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
-                                price_sell=price_sell, min_price=extend_msg, ctrip_url=url
+                                price_sell=price_sell, min_price=extend_msg, qunar_url=url
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"
@@ -149,7 +149,7 @@ async def flight_price_comparison(
                             extend_msg = f"{min_price}\n\n**涨价**: {increase_price}"
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
-                                price_sell=price_sell, min_price=extend_msg, ctrip_url=url
+                                price_sell=price_sell, min_price=extend_msg, qunar_url=url
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"

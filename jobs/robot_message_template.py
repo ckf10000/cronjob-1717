@@ -10,6 +10,7 @@
 # ---------------------------------------------------------------------------------------------------------
 """
 from datetime import datetime
+from urllib.parse import quote
 from typing import Dict, Any, Optional
 from http_helper.client.async_proxy import HttpClientFactory
 
@@ -21,6 +22,7 @@ message_api_config = {
 
 def get_current_dtstr() -> str:
     return datetime.now().strftime("%Y%m%d%H%M%S")
+
 
 def get_current_datetimestr() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -49,10 +51,16 @@ async def send_message_to_dingdin_robot(
     )
 
 
+def get_dingding_pc_slide_url(url: str) -> str:
+    return "dingtalk://dingtalkclient/page/link?url=" + quote(url, safe='') + "&pc_slide=false"
+
+
 def get_ctrip_price_comparison_template(
         order_id: int, flight_no: str, price_std: float, price_sell: float, min_price: float, ctrip_url: str
 ) -> Dict[str, Any]:
     qlv_url = f"https://pekzhongqihl.qlv88.com/OrderProcessing/NewTicket_show/{order_id}?&r={get_current_dtstr()}"
+    qlv_url = get_dingding_pc_slide_url(url=qlv_url)
+    ctrip_url = get_dingding_pc_slide_url(url=ctrip_url)
     return {
         "title": f"航班【{flight_no}】价格有变动",
         "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前携程平台最低价**：{min_price}",
@@ -69,10 +77,13 @@ def get_ctrip_price_comparison_template(
         ]
     }
 
+
 def get_fuwu_qunar_price_comparison_template(
-        order_id: int, flight_no: str, price_std: float, price_sell: float, min_price: str, ctrip_url: str
+        order_id: int, flight_no: str, price_std: float, price_sell: float, min_price: str, qunar_url: str
 ) -> Dict[str, Any]:
     qlv_url = f"https://pekzhongqihl.qlv88.com/OrderProcessing/NewTicket_show/{order_id}?&r={get_current_dtstr()}"
+    qlv_url = get_dingding_pc_slide_url(url=qlv_url)
+    qunar_url = get_dingding_pc_slide_url(url=qunar_url)
     return {
         "title": f"航班【{flight_no}】价格有变动",
         "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**航班**：{flight_no}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**当前去哪儿平台最低价**：{min_price}",
@@ -80,7 +91,7 @@ def get_fuwu_qunar_price_comparison_template(
         "btns": [
             {
                 "title": "打开去哪儿",
-                "actionURL": ctrip_url
+                "actionURL": qunar_url
             },
             {
                 "title": "打开劲旅",

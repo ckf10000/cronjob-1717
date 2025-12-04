@@ -104,6 +104,11 @@ async def flight_price_comparison(
                 dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
             else:
                 dep_date = cache_data.get("dat_dep")[:10]
+            if cache_data.get("cabin"):
+                order_cabin = cache_data.get("cabin")
+            else:
+                order_cabin = flight.get("cabin")
+            source_name = cache_data.get("source_name")
             response = await fetch_tts_agent_tool_total(
                 flight_no=flight_no, dpt=code_dep, arr=code_arr, flight_date=dep_date, uuid=uuid, headers=headers
             )
@@ -122,15 +127,18 @@ async def flight_price_comparison(
                         if low_sell_price_list:
                             low_sell_price_list.sort(key=lambda x: x["sellPrice"])
                             min_price = low_sell_price_list[0]["sellPrice"]
+                            ota_cabin = low_sell_price_list[0]["cabin"]
                         else:
                             low_view_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = low_view_price_list[0]["maxViewPrice"]
+                            ota_cabin = low_view_price_list[0]["cabin"]
                         reduction_price = round(price_sell - min_price, 1)
                         if reduction_price > low_threshold:
                             extend_msg = f"{min_price}\n\n**降价**: {reduction_price}"
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
-                                price_sell=price_sell, min_price=extend_msg, qunar_url=url
+                                price_sell=price_sell, min_price=extend_msg, qunar_url=url, order_cabin=order_cabin,
+                                ota_cabin=ota_cabin, source_ota=source_name
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"
@@ -141,15 +149,18 @@ async def flight_price_comparison(
                         if high_sell_price_list:
                             high_sell_price_list.sort(key=lambda x: x["sellPrice"])
                             min_price = high_sell_price_list[0]["sellPrice"]
+                            ota_cabin = high_sell_price_list[0]["cabin"]
                         else:
                             high_wiew_price_list.sort(key=lambda x: x["maxViewPrice"])
                             min_price = high_wiew_price_list[0]["maxViewPrice"]
+                            ota_cabin = high_wiew_price_list[0]["cabin"]
                         increase_price = round(min_price - price_sell, 1)
                         if increase_price > high_threshold:
                             extend_msg = f"{min_price}\n\n**涨价**: {increase_price}"
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
-                                price_sell=price_sell, min_price=extend_msg, qunar_url=url
+                                price_sell=price_sell, min_price=extend_msg, qunar_url=url, order_cabin=order_cabin,
+                                ota_cabin=ota_cabin, source_ota=source_name
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"

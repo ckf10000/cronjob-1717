@@ -87,7 +87,7 @@ def get_fuwu_qunar_price_comparison_template(
     qunar_url = get_dingding_pc_slide_url(url=qunar_url)
     return {
         "title": f"航班【{flight_no}】价格有变动",
-        "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**订单来源**: {source_ota}\n\n**航班**：{flight_no}\n\n**乘客舱位**：{order_cabin}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**去哪儿外放舱位**：{ota_cabin}\n\n**去哪儿最低价**：{min_price}",
+        "text": f"## 基本信息\n\n\n\n**通知时间**：{get_current_datetimestr()}\n\n**劲旅订单**：{order_id}\n\n**订单来源**：{source_ota}\n\n**航班**：{flight_no}\n\n**乘客舱位**：{order_cabin}\n\n**乘客票面价**：{price_std}\n\n**乘客销售价**：{price_sell}\n\n**去哪儿外放舱位**：{ota_cabin}\n\n**去哪儿最低价**：{min_price}",
         "btnOrientation": "0",
         "btns": [
             {

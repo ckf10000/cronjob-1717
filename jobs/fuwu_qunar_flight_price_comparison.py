@@ -100,6 +100,7 @@ async def flight_price_comparison(
             city_arr = flight.get("city_arr").strip() if flight.get("city_arr") else ""
             code_dep = flight.get("code_dep").strip() if flight.get("code_dep") else ""
             code_arr = flight.get("code_arr").strip() if flight.get("code_arr") else ""
+            dat_dep = redis_client.iso_to_standard_datetimestr(datestr=flight.get("dat_dep").strip(), time_zone_step=8) if flight.get("dat_dep") else cache_data.get("dat_dep")
             if flight.get("dat_dep"):
                 dep_date = redis_client.iso_to_standard_datestr(datestr=flight.get("dat_dep"), time_zone_step=8)
             else:
@@ -138,7 +139,7 @@ async def flight_price_comparison(
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
                                 price_sell=price_sell, min_price=extend_msg, qunar_url=url, order_cabin=order_cabin,
-                                ota_cabin=ota_cabin, source_ota=source_name
+                                ota_cabin=ota_cabin, source_ota=source_name, dat_dep=dat_dep
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"
@@ -160,7 +161,7 @@ async def flight_price_comparison(
                             action_card_message = get_fuwu_qunar_price_comparison_template(
                                 order_id=order_id, flight_no=flight_no, price_std=price_std,
                                 price_sell=price_sell, min_price=extend_msg, qunar_url=url, order_cabin=order_cabin,
-                                ota_cabin=ota_cabin, source_ota=source_name
+                                ota_cabin=ota_cabin, source_ota=source_name, dat_dep=dat_dep
                             )
                             await send_message_to_dingdin_robot(
                                 message=action_card_message, message_type="actionCard"

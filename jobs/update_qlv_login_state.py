@@ -16,9 +16,9 @@ from typing import Dict, Any
 from datetime import datetime
 from aiohttp import CookieJar
 from playwright_stealth import Stealth
-from jobs.redis_helper import redis_client
 from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
+from jobs.redis_helper import redis_client, redis_client_
 from qlv_helper.controller.user_login import wechat_login
 from qlv_helper.controller.main_page import get_main_info_with_http
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
@@ -81,13 +81,16 @@ async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: s
             await redis_client.set(
                 key=redis_client.gen_qlv_login_state_key(), value=state_json, ex=cache_expired_duration
             )
-
+            await redis_client_.set(
+                key=redis_client.gen_qlv_login_state_key(extend="周汗林"), value=state_json, ex=cache_expired_duration
+            )
         await browser.close()
 
         if is_success is True:
             return "[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，并已完成更新"
         else:
-            raise RuntimeError(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，{result}")
+            raise RuntimeError(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，{result}")
 
 
 async def main_loop():

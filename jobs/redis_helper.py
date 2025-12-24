@@ -153,8 +153,13 @@ class AsyncRedisHelper:
         return self.iso_to_standard_datetimestr(datestr=datestr, time_zone_step=time_zone_step)[:10]
 
     @staticmethod
-    def gen_qlv_login_state_key() -> str:
-        return ":".join(["qlv", "login", "state"])
+    def gen_qlv_login_state_key(extend: Optional[str] = None) -> str:
+        li = ["qlv", "login", "state"]
+        if extend:
+            if isinstance(extend, str) is False:
+                extend = str(extend)
+            li.append(extend)
+        return ":".join(li)
 
     @staticmethod
     def general_key_vid(last_time_ticket: str) -> int:
@@ -235,6 +240,7 @@ class AsyncReliableQueue:
 
 
 redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
+redis_client_ = AsyncRedisHelper(host='192.168.3.240', port=6379, db=1, password="Admin@123", decode_responses=True)
 activity_order_queue = AsyncReliableQueue(
     redis=redis_client.redis, key=redis_client.gen_qlv_flight_activity_order_list_key()
 )

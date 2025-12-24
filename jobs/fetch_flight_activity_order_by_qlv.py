@@ -54,24 +54,24 @@ async def get_flight_activity_order_by_qlv(logger: Logger, domain: str, protocol
 
     async def fetch_detail(order_id: int) -> Dict[str, Any]:
         """单个订单的详情请求（带并发锁）"""
-        async with sh:
-            try:
-                return await get_order_info_with_http(
-                    order_id=order_id, timeout=timeout, domain=domain,
-                    protocol=protocol, enable_log=True, retry=retry,
-                    cookie_jar=CookieJar(), playwright_state=playwright_state
-                )
-            except Exception as ex:
-                logger.error(f"获取订单：{order_id}详情失败：{ex}")
-                return dict(code=-1, message=str(ex), data=None)
+        if order_id:
+            async with sh:
+                try:
+                    return await get_order_info_with_http(
+                        order_id=order_id, timeout=timeout, domain=domain,
+                        protocol=protocol, enable_log=True, retry=retry,
+                        cookie_jar=CookieJar(), playwright_state=playwright_state
+                    )
+                except Exception as ex:
+                    logger.error(f"获取订单：{order_id}详情失败：{ex}")
+                    return dict(code=-1, message=str(ex), data=None)
 
-    domestic_activity_orders_dict = {x.get("id"): x for x in domestic_activity_orders}
+    domestic_activity_orders_dict = {x.get("id"): x for x in domestic_activity_orders if x.get("order_id")}
 
     # 创建任务
     tasks = [asyncio.create_task(fetch_detail(order_id=order_id)) for order_id, _ in
              domestic_activity_orders_dict.items()]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    msg = list()
     for result in results:
         if isinstance(result, dict) and result.get("code") == 200 and "订单出票查看" in result.get("message"):
             order_data = result.get("data")
@@ -90,12 +90,7 @@ async def get_flight_activity_order_by_qlv(logger: Logger, domain: str, protocol
                 await redis_client.set(key=key, value=activity_order, ex=remaining_time)
                 await activity_order_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 activity 队列
                 await order_state_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 order 队列
-        else:
-            msg.append(str(result))
-    if msg:
-        return RuntimeError("<br>".join(msg))
-    else:
-        return "任务执行成功"
+    return "任务执行成功"
 
 
 def register(executor):

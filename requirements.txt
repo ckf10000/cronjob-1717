@@ -1,7 +1,10 @@
 pyxxl==0.4.4
-redis==7.1.0
+loguru==0.7.3
 aiohttp==3.13.2
 watchdog==6.0.0
+python_ceair_helper>=0.2.4
 python_http_helper>=0.2.0
 python_playwright_helper>=0.3.0
-python_qlv_helper>=0.6.0
+python_qlv_helper>=0.6.2
+python_redis_helper>=0.0.7
+python_xxl_job_helper>=0.1.4

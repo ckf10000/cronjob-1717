@@ -1,0 +1,18 @@
+services:
+  playwright_cronjob_executor_1717:
+    image: playwright_cronjob_executor_1717:1.0.0
+    container_name: playwright_cronjob_executor_1717
+    ports:
+      - "9996:9996"
+    environment:
+      TZ: Asia/Shanghai
+      XXL_JOB_ADMIN_ADDRESS: "http://192.168.3.240:18070/xxl-job-admin/api/"
+      XXL_JOB_EXECUTOR_APPNAME: "playwright-cronjob-executor-1717"
+      XXL_JOB_EXECUTOR_PORT: "9996"
+      XXL_JOB_EXECUTOR_URL: "http://192.168.3.240:9996/"
+      XXL_JOB_ACCESS_TOKEN: "Abc123456"
+    volumes:
+      - ./jobs:/app/jobs                         # ★ Python 任务动态加载
+      - ./logs:/app/logs                         # 执行器以及任务日志
+      - ./screenshots:/app/screenshots           # 任务执行出错的截屏图片目录
+    restart: always

@@ -12,15 +12,16 @@
 import json
 import asyncio
 import traceback
+import jobs.config as config
 from typing import Dict, Any
 from datetime import datetime
 from aiohttp import CookieJar
 from playwright_stealth import Stealth
 from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
-from jobs.redis_helper import redis_client, redis_client_
 from qlv_helper.controller.user_login import wechat_login
 from qlv_helper.controller.main_page import get_main_info_with_http
+from jobs.redis_utils import redis_client, redis_client_, gen_qlv_login_state_key
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
 
 """
@@ -33,8 +34,8 @@ from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, U
 
 
 async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: str = "https",
-                             cache_expired_duration: int = 86400) -> str:
-    login_state: Dict[str, Any] = await redis_client.get(key=redis_client.gen_qlv_login_state_key())
+                             user_id: str = config.qlv_user_id, cache_expired_duration: int = 86400) -> str:
+    login_state: Dict[str, Any] = await redis_client.get(key=gen_qlv_login_state_key(extend=user_id))
     timeout: int = 5
     retry: int = 3
     response: [str, Any] = await get_main_info_with_http(
@@ -79,10 +80,10 @@ async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: s
             # 不指定 path，Playwright 会返回 JSON 字符串
             state_json = await browser.storage_state()
             await redis_client.set(
-                key=redis_client.gen_qlv_login_state_key(), value=state_json, ex=cache_expired_duration
+                key=gen_qlv_login_state_key(extend=user_id), value=state_json, ex=cache_expired_duration
             )
             await redis_client_.set(
-                key=redis_client.gen_qlv_login_state_key(extend="周汗林"), value=state_json, ex=cache_expired_duration
+                key=gen_qlv_login_state_key(extend=user_id), value=state_json, ex=cache_expired_duration
             )
         await browser.close()
 

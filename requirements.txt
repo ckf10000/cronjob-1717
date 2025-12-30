@@ -8,6 +8,6 @@ python_ceair_helper>=0.2.4
 python_http_helper>=0.2.0
 python_playwright_helper>=0.3.0
 python_ocr_helper>=0.0.1
-python_qlv_helper>=0.6.3
+python_qlv_helper>=0.6.4
 python_redis_helper>=0.0.7
 python_xxl_job_helper>=0.1.4

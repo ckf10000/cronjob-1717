@@ -21,7 +21,7 @@ from http_helper.client.async_proxy import HttpClientFactory
 from playwright_helper.libs.executor import PlaywrightBrowserExecutor
 
 if platform.system() == 'Windows':
-    headless = True
+    headless = False
 else:
     headless = True
 

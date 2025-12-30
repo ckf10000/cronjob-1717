@@ -21,9 +21,10 @@ from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
 from playwright_helper.libs.executor import RunResult
 from qlv_helper.controller.main_page import open_main_page
+from qlv_helper.controller.user_login import username_login
+from qlv_helper.controller.wechat_login import wechat_login
 from jobs.common import get_browser_pool, get_playwright_executor
 from qlv_helper.controller.main_page import get_main_info_with_http
-from qlv_helper.controller.user_login import wechat_login, username_login
 from jobs.redis_utils import redis_client, redis_client_, gen_qlv_login_state_key
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
@@ -156,15 +157,16 @@ async def update_qlv_login_state_local_executor(
             # await executor_update_qlv_login_state_with_wechat_task(
             #     logger=logger, qlv_user_id=qlv_user_id or config.qlv_user_id, qlv_domain=domain or config.qlv_domain,
             #     qlv_protocol=protocol or config.qlv_protocol, timeout=timeout or config.timeout,
-            #     retry=retry or config.retry,
+            #     retry=retry or 3,
             #     cache_expired_duration=cache_expired_duration or config.qlv_user_login_state_expired_duration
             # )
             await executor_update_qlv_login_state_with_username_task(
                 logger=logger, qlv_user_id=qlv_user_id or config.qlv_user_id, qlv_domain=domain or config.qlv_domain,
-                qlv_protocol=protocol or config.qlv_protocol, timeout=timeout or config.timeout, secret_key=secret_key,
-                retry=retry or config.retry, qlv_user_password=qlv_user_password, api_key=api_key,
-                cache_expired_duration=cache_expired_duration or config.qlv_user_login_state_expired_duration,
-                attempt=attempt or config.login_attempt
+                qlv_protocol=protocol or config.qlv_protocol, timeout=timeout or config.timeout,
+                secret_key=secret_key or config.baidu_secret_key, retry=retry or config.retry,
+                qlv_user_password=qlv_user_password or config.qlv_user_password,
+                api_key=api_key or config.baidu_api_key, attempt=attempt or config.login_attempt,
+                cache_expired_duration=cache_expired_duration or config.qlv_user_login_state_expired_duration
             )
         except (PlaywrightError, PlaywrightTimeoutError, RuntimeError, EnvironmentError, Exception) as e:
             logger.error(e)
@@ -185,7 +187,7 @@ def register(executor):
             qlv_domain=executor_params.get("qlv_domain") or config.qlv_domain,
             qlv_protocol=executor_params.get("qlv_protocol") or config.qlv_protocol,
             qlv_user_id=executor_params.get("qlv_user_id") or config.qlv_user_id,
-            qlv_user_password=executor_params.get("qlv_user_password") or config.qlv_user_id,
+            qlv_user_password=executor_params.get("qlv_user_password") or config.qlv_user_login_state_expired_duration,
             cache_expired_duration=executor_params.get(
                 "cache_expired_duration") or config.qlv_user_login_state_expired_duration,
             api_key=executor_params.get("api_key") or config.baidu_api_key,

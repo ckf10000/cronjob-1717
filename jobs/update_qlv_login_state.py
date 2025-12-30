@@ -11,17 +11,21 @@
 """
 import json
 import asyncio
-import traceback
+from logging import Logger
 import jobs.config as config
-from typing import Dict, Any
-from datetime import datetime
 from aiohttp import CookieJar
+from typing import Dict, Any, Optional
 from playwright_stealth import Stealth
+from log_tuils import get_screenshot_dir
 from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
-from qlv_helper.controller.user_login import wechat_login
+from playwright_helper.libs.executor import RunResult
+from qlv_helper.controller.main_page import open_main_page
+from jobs.common import get_browser_pool, get_playwright_executor
 from qlv_helper.controller.main_page import get_main_info_with_http
+from qlv_helper.controller.user_login import wechat_login, username_login
 from jobs.redis_utils import redis_client, redis_client_, gen_qlv_login_state_key
+from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
 
 """
@@ -33,18 +37,18 @@ from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, U
 """
 
 
-async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: str = "https",
-                             user_id: str = config.qlv_user_id, cache_expired_duration: int = 86400) -> str:
-    login_state: Dict[str, Any] = await redis_client.get(key=gen_qlv_login_state_key(extend=user_id))
-    timeout: int = 5
-    retry: int = 3
+async def executor_update_qlv_login_state_with_wechat_task(
+        *, logger: Logger, qlv_user_id: str, qlv_domain: str, qlv_protocol: str, cache_expired_duration: int,
+        timeout: float, retry: int, **kwargs: Any
+) -> Optional[str]:
+    login_state: Dict[str, Any] = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
     response: [str, Any] = await get_main_info_with_http(
-        domain=domain, protocol=protocol, retry=retry, timeout=timeout, enable_log=True,
+        domain=qlv_domain, protocol=qlv_protocol, retry=retry, timeout=int(timeout), enable_log=True,
         cookie_jar=CookieJar(), playwright_state=login_state
     )
     if response.get('code') == 200 and "中企航旅航空科技有限公司 劲旅系统" in response.get('message').strip():
-        string = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态有效，任务跳过"
-        return string
+        logger.warning(f"劲旅用户<{qlv_user_id}>登录状态有效，任务跳过")
+        return
     login_url: str = "https://pekzhongqihl.qlv88.com/Home/Login"
     # 创建 stealth 配置
     stealth = Stealth(
@@ -80,33 +84,92 @@ async def update_login_state(domain: str = "pekzhongqihl.qlv88.com", protocol: s
             # 不指定 path，Playwright 会返回 JSON 字符串
             state_json = await browser.storage_state()
             await redis_client.set(
-                key=gen_qlv_login_state_key(extend=user_id), value=state_json, ex=cache_expired_duration
+                key=gen_qlv_login_state_key(extend=qlv_user_id), value=state_json, ex=cache_expired_duration
             )
             await redis_client_.set(
-                key=gen_qlv_login_state_key(extend=user_id), value=state_json, ex=cache_expired_duration
+                key=gen_qlv_login_state_key(extend=qlv_user_id), value=state_json, ex=cache_expired_duration
             )
         await browser.close()
 
         if is_success is True:
-            return "[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，并已完成更新"
+            logger.info(f"劲旅用户<{qlv_user_id}>，微信认证方式登录成功，并已完成缓存数据更新")
+            return "任务执行成功"
         else:
-            raise RuntimeError(
-                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测到劲旅平台登录状态已过期，{result}")
+            raise RuntimeError(f"劲旅用户<{qlv_user_id}>，微信认证方式登录失败，原因：{result}")
 
 
-async def main_loop():
-    slp = 120
+async def executor_update_qlv_login_state_with_username_task(
+        *, logger: Logger, qlv_protocol: str, qlv_domain: str, qlv_user_id: str, qlv_user_password: str,
+        cache_expired_duration: int, api_key: str, secret_key: str, timeout: float = 20.0, retry: int = 0,
+        attempt: int = 100, **kwargs: Any
+) -> Optional[str]:
+    playwright_state = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    pool = get_browser_pool(logger=logger)
+    executor = get_playwright_executor(logger=logger, retry=retry, pool=pool)
+    await executor.start()
+    if playwright_state:
+        result: RunResult = await executor.run(
+            callback=open_main_page, storage_state=playwright_state, qlv_protocol=qlv_protocol, qlv_domain=qlv_domain,
+            timeout=timeout
+        )
+        if result.success is True:
+            logger.warning(f"劲旅用户<{qlv_user_id}>，当前登录状态有效，本次任务就就此跳过")
+            # 进程退出时关闭
+            await pool.stop()
+            await executor.stop()
+            return
+        else:
+            logger.error(result.error)
 
+    result: RunResult = await executor.run(
+        callback=username_login, username=qlv_user_id, password=qlv_user_password, qlv_protocol=qlv_protocol,
+        qlv_domain=qlv_domain, screenshot_dir=get_screenshot_dir(), timeout=timeout, api_key=api_key,
+        secret_key=secret_key, attempt=attempt
+    )
+    # 进程退出时关闭
+    await pool.stop()
+    await executor.stop()
+
+    if result.result and isinstance(result.result, dict):
+        await redis_client.set(
+            key=gen_qlv_login_state_key(extend=qlv_user_id), value=result.result, ex=cache_expired_duration
+        )
+        await redis_client_.set(
+            key=gen_qlv_login_state_key(extend=qlv_user_id), value=result.result, ex=cache_expired_duration
+        )
+        msg: str = "任务执行成功"
+        logger.info(msg)
+        return msg
+    else:
+        raise result.error
+
+
+async def update_qlv_login_state_local_executor(
+        *, logger: Logger, sleep: int = 60, qlv_user_id: Optional[str] = None, domain: Optional[str] = None,
+        protocol: Optional[str] = None, timeout: Optional[int] = None, retry: Optional[int] = None,
+        cache_expired_duration: Optional[int] = None, qlv_user_password: Optional[str] = None,
+        api_key: Optional[str] = None, secret_key: Optional[str] = None, attempt: Optional[int] = None, **kwargs: Any
+):
     while True:
+        logger.info(f"劲旅平台登录状态是否过期检测中...")
         try:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 劲旅平台登录状态是否过期检测中...")
-            result = await update_login_state()
-            print(result)
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {slp}秒后继续检测")
-            await asyncio.sleep(delay=slp)
-        except Exception as e:
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {traceback.format_exc()}")
-            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {e}")
+            # await executor_update_qlv_login_state_with_wechat_task(
+            #     logger=logger, qlv_user_id=qlv_user_id or config.qlv_user_id, qlv_domain=domain or config.qlv_domain,
+            #     qlv_protocol=protocol or config.qlv_protocol, timeout=timeout or config.timeout,
+            #     retry=retry or config.retry,
+            #     cache_expired_duration=cache_expired_duration or config.qlv_user_login_state_expired_duration
+            # )
+            await executor_update_qlv_login_state_with_username_task(
+                logger=logger, qlv_user_id=qlv_user_id or config.qlv_user_id, qlv_domain=domain or config.qlv_domain,
+                qlv_protocol=protocol or config.qlv_protocol, timeout=timeout or config.timeout, secret_key=secret_key,
+                retry=retry or config.retry, qlv_user_password=qlv_user_password, api_key=api_key,
+                cache_expired_duration=cache_expired_duration or config.qlv_user_login_state_expired_duration,
+                attempt=attempt or config.login_attempt
+            )
+        except (PlaywrightError, PlaywrightTimeoutError, RuntimeError, EnvironmentError, Exception) as e:
+            logger.error(e)
+        logger.info(f"劲旅平台登录状态是否过期检测流程结束，等待<{sleep}>秒后将重试")
+        await asyncio.sleep(sleep)
 
 
 def register(executor):
@@ -116,17 +179,31 @@ def register(executor):
         executor_params = g.xxl_run_data.executorParams if isinstance(
             g.xxl_run_data.executorParams, dict
         ) else json.loads(g.xxl_run_data.executorParams)
-        g.logger.info(
-            f"[fetch_flight_order_to_redis_by_qlv] running with executor params: %s" % executor_params)
-        return await update_login_state(
-            domain=executor_params.get("domain", "pekzhongqihl.qlv88.com"),
-            protocol=executor_params.get("protocol", "https"),
-            cache_expired_duration=executor_params.get("cache_expired_duration", 86400)
+        g.logger.info(f"[update_qlv_login_state] running with executor params: {executor_params}")
+        return await executor_update_qlv_login_state_with_username_task(
+            logger=g.logger,
+            qlv_domain=executor_params.get("qlv_domain") or config.qlv_domain,
+            qlv_protocol=executor_params.get("qlv_protocol") or config.qlv_protocol,
+            qlv_user_id=executor_params.get("qlv_user_id") or config.qlv_user_id,
+            qlv_user_password=executor_params.get("qlv_user_password") or config.qlv_user_id,
+            cache_expired_duration=executor_params.get(
+                "cache_expired_duration") or config.qlv_user_login_state_expired_duration,
+            api_key=executor_params.get("api_key") or config.baidu_api_key,
+            secret_key=executor_params.get("secret_key") or config.baidu_secret_key,
+            retry=executor_params.get("retry") or config.retry,
+            timeout=executor_params.get("timeout") or config.timeout,
+            attempt=executor_params.get("attempt") or config.login_attempt
         )
 
 
 if __name__ == '__main__':
+    from logging import INFO
+    from log_tuils import setup_logger, get_log_dir
+
+    logger = setup_logger(
+        logs_dir=get_log_dir(), file_name="update_qlv_login_state", log_level=INFO
+    )
     try:
-        asyncio.run(main_loop())
-    except (KeyboardInterrupt, Exception):
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 检测已退出...")
+        asyncio.run(update_qlv_login_state_local_executor(logger=logger, sleep=60))
+    except (KeyboardInterrupt, SystemExit, Exception):
+        logger.warning("程序已经退出")

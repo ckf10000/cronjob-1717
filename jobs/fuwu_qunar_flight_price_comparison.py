@@ -16,7 +16,7 @@ import jobs.config as config
 from typing import Optional, Dict, Any
 from jobs.common import fetch_tts_agent_tool_total, get_fuwu_qunar_price_comparison_template, \
     send_message_to_dingdin_robot
-from jobs.redis_utils import redis_client, activity_order_queue, iso_to_standard_datestr, iso_to_standard_datetimestr
+from jobs.redis_utils import redis_client_0, activity_order_queue, iso_to_standard_datestr, iso_to_standard_datetimestr
 
 """
 比价逻辑
@@ -35,7 +35,7 @@ async def executor_fuwu_qunar_flight_price_comparison_task(
     # 2. 从队尾取出（FIFO）
     key = await activity_order_queue.pop()
     if key:
-        cache_data = await redis_client.get(key)
+        cache_data = await redis_client_0.get(key)
         if cache_data:
             order_id = cache_data.get("id")
             flights = cache_data.get("flights")
@@ -114,7 +114,8 @@ async def executor_fuwu_qunar_flight_price_comparison_task(
                                 min_price = high_wiew_price_list[0]["maxViewPrice"]
                                 ota_cabin = high_wiew_price_list[0]["cabin"]
                             increase_price = round(min_price - price_sell, 1)
-                            if increase_price > high_threshold:
+                            # if increase_price > high_threshold:
+                            if increase_price > high_threshold and ota_cabin != order_cabin:
                                 extend_msg = f"{min_price}\n\n**涨价**: {increase_price}"
                                 action_card_message = get_fuwu_qunar_price_comparison_template(
                                     order_id=order_id, flight_no=flight_no, price_std=price_std, qlv_domain=qlv_domain,
@@ -126,7 +127,7 @@ async def executor_fuwu_qunar_flight_price_comparison_task(
                                     message=action_card_message, message_type="actionCard"
                                 )
                             else:
-                                min_price = f"{min_price}，涨价: {increase_price}，小于或等于涨价阈值: {high_threshold}，不报告警"
+                                min_price = f"{min_price}，涨价: {increase_price}，小于或等于涨价阈值: {high_threshold}，或者同舱涨价，不报告警"
                         else:
                             logger.warning(f"比价平台报告与航班销售价持平")
                             min_price = "无"

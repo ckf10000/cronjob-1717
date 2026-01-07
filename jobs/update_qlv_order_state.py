@@ -16,7 +16,7 @@ from aiohttp import CookieJar
 import jobs.config as config
 from typing import List, Dict, Any, Optional
 from qlv_helper.controller.order_detail import get_order_info_with_http
-from jobs.redis_utils import redis_client, order_state_queue, gen_qlv_login_state_key, qlv_flight_order_key_convert_dict
+from jobs.redis_utils import redis_client_0, order_state_queue, gen_qlv_login_state_key, qlv_flight_order_key_convert_dict
 
 """
 更新逻辑：
@@ -43,13 +43,13 @@ async def executor_update_order_state_task(
         logger.warning("Redis队列中没有需要更新状态的订单数据，任务跳过")
         return
 
-    playwright_state = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    playwright_state = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     if not playwright_state:
         await order_state_queue.requeue(task=key)
         raise RuntimeError("Redis中劲旅登录状态数据已过期")
     order_info = qlv_flight_order_key_convert_dict(key=key)
     order_id = order_info.get("extend")
-    order_info = await redis_client.get(key=key)
+    order_info = await redis_client_0.get(key=key)
     if not order_info:
         await order_state_queue.finish(task=key)
         logger.warning(f"劲旅订单：{order_id}，在Redis中的详情数据已经过期，任务跳过")
@@ -73,18 +73,18 @@ async def executor_update_order_state_task(
         raise RuntimeError(f"劲旅订单：{order_id}，详情页面数据解析异常")
     if discard_state:
         if stat_order in discard_state:
-            await redis_client.expire(key=key, expire=1)
+            await redis_client_0.expire(key=key, expire=1)
             # 3. 数据可以丢弃
             await order_state_queue.finish(task=key)
             logger.warning(f"劲旅订单：{order_id}，当前的订单状态：{stat_order}，在Redis中的详情数据将被丢弃")
             return
     order_info["stat_order"] = stat_order
     order_info["stat_opration"] = stat_opration
-    ttl = await redis_client.ttl(key=key)
+    ttl = await redis_client_0.ttl(key=key)
     if ttl < 1:
         last_time_ticket = order_info.get("last_time_ticket")
-        ttl = redis_client.general_key_vid(last_time_ticket=last_time_ticket)
-    await redis_client.set(key=key, value=order_info, ex=ttl)
+        ttl = redis_client_0.general_key_vid(last_time_ticket=last_time_ticket)
+    await redis_client_0.set(key=key, value=order_info, ex=ttl)
     # 4. key还需要继续使用，重新扔回队列
     await order_state_queue.requeue(task=key)
     msg: str = f"任务执行成功，劲旅订单：{order_id}，在Redis中的订单状态已更新"

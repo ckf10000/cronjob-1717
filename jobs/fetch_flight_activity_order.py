@@ -17,7 +17,7 @@ from aiohttp import CookieJar
 from typing import Dict, Any, Optional
 from qlv_helper.controller.order_detail import get_order_info_with_http
 from qlv_helper.controller.order_table import get_domestic_activity_order_table
-from jobs.redis_utils import redis_client, activity_order_queue, order_state_queue, gen_qlv_login_state_key, \
+from jobs.redis_utils import redis_client_0, activity_order_queue, order_state_queue, gen_qlv_login_state_key, \
     gen_qlv_flight_order_key_prefix
 
 """
@@ -32,7 +32,7 @@ async def executor_fetch_flight_activity_order_task(
         *, logger: Logger, qlv_domain: str, qlv_protocol: str, qlv_user_id: str, timeout: float = 60.0, retry: int = 0,
         semaphore: int = 10
 ) -> Optional[str]:
-    playwright_state = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    playwright_state = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     if not playwright_state:
         raise RuntimeError("Redis中劲旅登录状态数据已过期")
     # -------------------------
@@ -84,14 +84,14 @@ async def executor_fetch_flight_activity_order_task(
                     dep_city=activity_order.get("code_dep"), arr_city=activity_order.get("code_arr"),
                     dep_date=activity_order.get("dat_dep"), extend=order_id, cabin=cabin, flight_no=flight_no,
                 )
-                cache_data = await redis_client.get(key)
+                cache_data = await redis_client_0.get(key)
                 if cache_data:
                     continue
                 else:
                     if flag is False:
                         flag = True
                     activity_order.update(order_data)
-                    await redis_client.set(key=key, value=activity_order, ex=remaining_time)
+                    await redis_client_0.set(key=key, value=activity_order, ex=remaining_time)
                     await activity_order_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 activity 队列
                     await order_state_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 order 队列
         if flag is True:

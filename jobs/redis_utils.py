@@ -9,7 +9,7 @@
 # Copyright ©2011-2025. Hunan xxxxxxx Company limited. All rights reserved.
 # ---------------------------------------------------------------------------------------------------------
 """
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from datetime import datetime, timedelta
 from redis_helper.client import AsyncRedisHelper
 from redis_helper.set_helper import AsyncReliableQueue
@@ -22,8 +22,8 @@ def gen_qlv_flight_order_key_prefix(
         *, dep_city: str = None, arr_city: str = None, dep_date: str = None, flight_no: str = None, cabin: str = None,
         extend: str = None
 ) -> str:
-    # 格式： flight:order:[平台ID]:[departureCityCode]:[arrivalCityCode]:[日期]:[flightNo]:[cabin]:[平台单号]
-    # 如：flight:order:qlv:CAN:WUS:2025-12-01:SC4674:S:153471
+    # 格式： flight:order:[平台ID]:[departureCityCode]:[arrivalCityCode]:[日期]:[flightNo]:[cabin]:[平台单号]:[采购平台订单号]
+    # 如：flight:order:qlv:CAN:WUS:2025-12-01:SC4674:S:153471:13123123123113
     li = ["flight", "order", "qlv"]
     if dep_city:
         if isinstance(dep_city, str) is False:
@@ -53,6 +53,7 @@ def gen_qlv_flight_order_key_prefix(
         li.append(extend)
     return ":".join(li)
 
+
 def qlv_flight_order_key_convert_dict(key: str) -> Dict[str, Any]:
     try:
         key_slice = key.split(":")
@@ -75,12 +76,14 @@ def qlv_flight_order_key_convert_dict(key: str) -> Dict[str, Any]:
         return dict()
 
 
-def gen_qlv_flight_activity_order_list_key() -> str:
-    return ":".join(["flight", "order", "qlv", "activity"])
+# 国内活动订单集合
+def gen_domestic_activity_order_set_key() -> str:
+    return ":".join(["flight", "order", "qlv", "activity", "domestic"])
 
 
-def gen_qlv_flight_order_state_list_key() -> str:
-    return ":".join(["flight", "order", "qlv", "state"])
+# 更新订单状态集合
+def gen_update_state_order_set_key() -> str:
+    return ":".join(["flight", "order", "qlv", "state", "update"])
 
 
 def iso_to_standard_datetimestr(datestr: str, time_zone_step: int) -> str:
@@ -96,13 +99,9 @@ def iso_to_standard_datestr(datestr: str, time_zone_step: int) -> str:
     return iso_to_standard_datetimestr(datestr=datestr, time_zone_step=time_zone_step)[:10]
 
 
-def gen_qlv_login_state_key(extend: Optional[str] = None) -> str:
-    li = ["qlv", "login", "state"]
-    if extend:
-        if isinstance(extend, str) is False:
-            extend = str(extend)
-        li.append(extend)
-    return ":".join(li)
+# 劲旅平台web端账号登录状态key
+def gen_qlv_login_state_key(user_id: str) -> str:
+    return f"login:state:web:qlv:{user_id}"
 
 
 def general_key_vid(last_time_ticket: str) -> int:
@@ -115,7 +114,11 @@ def general_key_vid(last_time_ticket: str) -> int:
         return 86400
 
 
-redis_client = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
-redis_client_ = AsyncRedisHelper(host='192.168.3.240', port=6379, db=1, password="Admin@123", decode_responses=True)
-activity_order_queue = AsyncReliableQueue(redis=redis_client.redis, key=gen_qlv_flight_activity_order_list_key())
-order_state_queue = AsyncReliableQueue(redis=redis_client.redis, key=gen_qlv_flight_order_state_list_key())
+redis_client_0 = AsyncRedisHelper(host='192.168.3.240', port=6379, db=0, password="Admin@123", decode_responses=True)
+redis_client_1 = AsyncRedisHelper(host='192.168.3.240', port=6379, db=1, password="Admin@123", decode_responses=True)
+
+# 队列值：flight:order:qlv:CAN:WUS:2025-12-01:SC4674:S:153471
+activity_order_queue = AsyncReliableQueue(redis=redis_client_0.redis, key=gen_domestic_activity_order_set_key())
+
+# 队列值：flight:order:qlv:CAN:WUS:2025-12-01:SC4674:S:153471
+order_state_queue = AsyncReliableQueue(redis=redis_client_0.redis, key=gen_update_state_order_set_key())

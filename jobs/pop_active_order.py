@@ -16,7 +16,7 @@ import jobs.config as config
 from typing import Any, Optional
 from playwright_helper.utils.type_utils import RunResult
 from jobs.common import get_browser_pool, get_playwright_executor
-from jobs.redis_utils import redis_client, gen_qlv_login_state_key
+from jobs.redis_utils import redis_client_0, gen_qlv_login_state_key
 from qlv_helper.controller.order_table import pop_will_expire_domestic_activity_order
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
@@ -25,7 +25,7 @@ async def executor_pop_actvite_order_task(
         *, logger: Logger, qlv_protocol: str, qlv_domain: str, qlv_user_id: str, last_minute_threshold: int,
         timeout: float = 20.0, retry: int = 0, **kwargs: Any
 ) -> Optional[str]:
-    playwright_state = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    playwright_state = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     if not playwright_state:
         raise RuntimeError("Redis中劲旅登录状态数据已过期")
     pool = get_browser_pool(logger=logger)

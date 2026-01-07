@@ -25,7 +25,7 @@ from qlv_helper.controller.user_login import username_login
 from qlv_helper.controller.wechat_login import wechat_login
 from jobs.common import get_browser_pool, get_playwright_executor
 from qlv_helper.controller.main_page import get_main_info_with_http
-from jobs.redis_utils import redis_client, redis_client_, gen_qlv_login_state_key
+from jobs.redis_utils import redis_client_0, redis_client_1, gen_qlv_login_state_key
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
 
@@ -42,7 +42,7 @@ async def executor_update_qlv_login_state_with_wechat_task(
         *, logger: Logger, qlv_user_id: str, qlv_domain: str, qlv_protocol: str, cache_expired_duration: int,
         timeout: float, retry: int, **kwargs: Any
 ) -> Optional[str]:
-    login_state: Dict[str, Any] = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    login_state: Dict[str, Any] = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     response: [str, Any] = await get_main_info_with_http(
         domain=qlv_domain, protocol=qlv_protocol, retry=retry, timeout=int(timeout), enable_log=True,
         cookie_jar=CookieJar(), playwright_state=login_state
@@ -84,11 +84,11 @@ async def executor_update_qlv_login_state_with_wechat_task(
         if is_success is True:
             # 不指定 path，Playwright 会返回 JSON 字符串
             state_json = await browser.storage_state()
-            await redis_client.set(
-                key=gen_qlv_login_state_key(extend=qlv_user_id), value=state_json, ex=cache_expired_duration
+            await redis_client_0.set(
+                key=gen_qlv_login_state_key(user_id=qlv_user_id), value=state_json, ex=cache_expired_duration
             )
-            await redis_client_.set(
-                key=gen_qlv_login_state_key(extend=qlv_user_id), value=state_json, ex=cache_expired_duration
+            await redis_client_1.set(
+                key=gen_qlv_login_state_key(user_id=qlv_user_id), value=state_json, ex=cache_expired_duration
             )
         await browser.close()
 
@@ -104,7 +104,7 @@ async def executor_update_qlv_login_state_with_username_task(
         cache_expired_duration: int, api_key: str, secret_key: str, timeout: float = 20.0, retry: int = 0,
         attempt: int = 100, **kwargs: Any
 ) -> Optional[str]:
-    playwright_state = await redis_client.get(key=gen_qlv_login_state_key(extend=qlv_user_id))
+    playwright_state = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     pool = get_browser_pool(logger=logger)
     executor = get_playwright_executor(logger=logger, retry=retry, pool=pool)
     await executor.start()
@@ -132,11 +132,11 @@ async def executor_update_qlv_login_state_with_username_task(
     await executor.stop()
 
     if result.result and isinstance(result.result, dict):
-        await redis_client.set(
-            key=gen_qlv_login_state_key(extend=qlv_user_id), value=result.result, ex=cache_expired_duration
+        await redis_client_0.set(
+            key=gen_qlv_login_state_key(user_id=qlv_user_id), value=result.result, ex=cache_expired_duration
         )
-        await redis_client_.set(
-            key=gen_qlv_login_state_key(extend=qlv_user_id), value=result.result, ex=cache_expired_duration
+        await redis_client_1.set(
+            key=gen_qlv_login_state_key(user_id=qlv_user_id), value=result.result, ex=cache_expired_duration
         )
         msg: str = "任务执行成功"
         logger.info(msg)

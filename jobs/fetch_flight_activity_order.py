@@ -65,25 +65,31 @@ async def executor_fetch_flight_activity_order_task(
                         logger.error(f"获取订单：{order_id}详情失败：{ex}")
                         return dict(code=-1, message=str(ex), data=None)
 
-        domestic_activity_orders_dict = {x.get("id"): x for x in domestic_activity_orders if x.get("id")}
+        is_not_fetch: Dict[int, Any] = dict()
+        domestic_activity_orders_dict: Dict[int, Any] = dict()
+        for domestic_activity_order in domestic_activity_orders:
+            order_id = domestic_activity_order.get("id")
+            if order_id:
+                key = gen_qlv_flight_order_key_prefix(
+                    dep_city=domestic_activity_order.get("code_dep"), arr_city=domestic_activity_order.get("code_arr"),
+                    dep_date=domestic_activity_order.get("dat_dep"), extend=order_id,
+                    cabin=domestic_activity_order.get("cabin"), flight_no=domestic_activity_order.get("flight_no"),
+                )
+                if await activity_order_queue.exists(task=key) is False:
+                    is_not_fetch[order_id] = key
+                domestic_activity_orders_dict[order_id] = domestic_activity_order
 
         # 创建任务
-        tasks = [asyncio.create_task(fetch_detail(order_id=order_id)) for order_id, _ in
-                 domestic_activity_orders_dict.items()]
+        tasks = [asyncio.create_task(fetch_detail(order_id=order_id)) for order_id in is_not_fetch.keys()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         flag = False
         for result in results:
             if isinstance(result, dict) and result.get("code") == 200 and "订单出票查看" in result.get("message"):
                 order_data = result.get("data")
                 order_id = order_data.get("id")
+                key = is_not_fetch.get(order_id)
                 activity_order = domestic_activity_orders_dict.get(order_id)
-                cabin = activity_order.get("cabin")
-                flight_no = activity_order.get("flight_no")
                 remaining_time = activity_order.get("remaining_time")
-                key = gen_qlv_flight_order_key_prefix(
-                    dep_city=activity_order.get("code_dep"), arr_city=activity_order.get("code_arr"),
-                    dep_date=activity_order.get("dat_dep"), extend=order_id, cabin=cabin, flight_no=flight_no,
-                )
                 cache_data = await redis_client_0.get(key)
                 if cache_data:
                     continue

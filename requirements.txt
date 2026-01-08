@@ -11,4 +11,4 @@ python_ocr_helper>=0.0.2
 python_qlv_helper>=0.6.4
 python_redis_helper>=0.0.7
 python_xxl_job_helper>=0.1.4
-python_qdairlines_helper>=0.0.6
+python_qdairlines_helper>=0.0.8

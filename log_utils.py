@@ -1,14 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-# ---------------------------------------------------------------------------------------------------------
-# ProjectName:  cronjob-1717
-# FileName:     log_utils.py
-# Description:  日志模块
-# Author:       ASUS
-# CreateDate:   2026/01/18
-# Copyright ©2011-2026. Hunan xxxxxxx Company limited. All rights reserved.
-# ---------------------------------------------------------------------------------------------------------
-"""
 import os as _os
 import sys as _sys
 import logging as _logging
@@ -50,6 +40,18 @@ def get_screenshot_dir() -> str:
     return log_dir
 
 
+def set_pathname(record: _logging.LogRecord):
+    pathname = getattr(record, "pathname", None)
+    if pathname.find("site-packages") != - 1:
+        record.pathname = pathname.split("site-packages")[-1]
+    elif pathname.find("Lib") != - 1:
+        record.pathname = pathname.split("Lib")[-1]
+    elif pathname.find("jobs") != - 1:
+        record.pathname = _os.sep + _os.path.join("jobs", _os.path.basename(record.pathname))
+    else:
+        record.pathname = _os.sep + _os.path.basename(record.pathname)
+
+
 class SafeFormatter(_logging.Formatter):
     def format(self, record):
         log_id = getattr(record, "logId", None)
@@ -63,6 +65,7 @@ class SafeFormatter(_logging.Formatter):
         else:
             record.jobId = ""
         source = "TASK" if log_id or job_id else "EXECUTOR"
+        # set_pathname(record=record)
         record.source = f"- [{source}] "
         return super().format(record)
 
@@ -73,13 +76,22 @@ CUSTOM_CONSOLE_FORMAT = (
     "<yellow>{extra[source]}</yellow> | "
     "<magenta>{extra[jobId]}</magenta>"
     "<blue>{extra[logId]}</blue>"
-    "<green>{extra[logger_name]}</green><cyan>{extra[pathname]}</cyan>:<cyan>({extra[funcName]}</cyan>:<cyan>{extra[lineno]})</cyan> - "
+    "<level>{message}</level>"
+    "<green>{extra[logger_name]}</green><cyan>{extra[pathname]}</cyan>:<cyan>({extra[funcName]}</cyan>:<cyan>{extra[lineno]})</cyan>"
+)
+
+CUSTOM_CONSOLE_FORMAT_NOT_DISPLAY = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level:<8}</level> | "
+    "<yellow>{extra[source]}</yellow> | "
+    "<magenta>{extra[jobId]}</magenta>"
+    "<blue>{extra[logId]}</blue>"
     "<level>{message}</level>"
 )
 
 CUSTOM_FILE_FORMAT_STR = (
     "%(asctime)s.%(msecs)03d - [PID-%(process)d] - [%(threadName)s-%(thread)d] - [%(levelname)s] "
-    "%(source)s%(jobId)s%(logId)s- %(pathname)s(%(funcName)s:%(lineno)d - %(message)s"
+    "%(source)s%(jobId)s%(logId)s- %(message)s - %(pathname)s:(%(funcName)s:%(lineno)d)"
 )
 
 UNIFIED_FORMATTER = SafeFormatter(
@@ -118,12 +130,13 @@ class LoguruHandler(_logging.Handler):
         # ----------------------------
         # 2️⃣ 绑定 context（核心）
         # ----------------------------
+        # set_pathname(record=record)
         extra = {
             "source": source,
             "jobId": f"jobId={job_id} | " if job_id else "",
             "logId": f"logId={log_id} | " if log_id else "",
-            "logger_name": f"{record.name} | " if source == "EXECUTOR" else "",
-            "pathname": _os.path.basename(record.pathname),
+            "logger_name": f" | {record.name} | " if source == "EXECUTOR" else "",
+            "pathname": record.pathname,
             "funcName": record.funcName,
             "lineno": record.lineno,
         }
@@ -164,7 +177,7 @@ def hacked_setup_logging(path: str, name: str, level: int = _logging.INFO) -> _l
         colorize=True,
         backtrace=False,
         diagnose=False,
-        format=CUSTOM_CONSOLE_FORMAT,  # 🔥 就是这一行
+        format=CUSTOM_CONSOLE_FORMAT_NOT_DISPLAY,  # 🔥 就是这一行
     )
 
     # ② file → logging（给系统 / 运维 / admin）
@@ -194,18 +207,19 @@ def hacked_get_disk_logger(self, log_id: int, *, stdout: bool = True, level: int
     logger.propagate = False
     logger.setLevel(level)
 
-    console_handler = LoguruHandler()
-    logger.addHandler(console_handler)
+    if stdout:
+        console_handler = LoguruHandler()
+        logger.addHandler(console_handler)
 
-    _loguru_logger.remove()  # 移除默认 handler
-    _loguru_logger.add(
-        _sys.stdout,
-        level=level,
-        colorize=True,
-        backtrace=False,
-        diagnose=False,
-        format=CUSTOM_CONSOLE_FORMAT,  # 🔥 就是这一行
-    )
+        _loguru_logger.remove()  # 移除默认 handler
+        _loguru_logger.add(
+            _sys.stdout,
+            level=level,
+            colorize=True,
+            backtrace=False,
+            diagnose=False,
+            format=CUSTOM_CONSOLE_FORMAT_NOT_DISPLAY,  # 🔥 就是这一行
+        )
 
     file_handler = FileHandler(self.key(log_id), delay=True, encoding="utf-8")
     file_handler.setLevel(level)
@@ -219,103 +233,53 @@ _xxl_setting.setup_logging = hacked_setup_logging
 _DiskLog.get_logger = hacked_get_disk_logger
 
 
-def setup_logger(logs_dir: str, file_name: str, log_level: int = _logging.DEBUG) -> _logging.Logger:
-    try:
-        from loguru import logger
+def setup_logger(
+        *, logs_dir: str, file_name: str, log_level: int = _logging.DEBUG, display_path: bool = False
+) -> _logging.Logger:
+    logger = _logging.getLogger()
+    logger.handlers.clear()
+    logger.setLevel(log_level)
+    logger.propagate = False
 
-        class InterceptHandler(_logging.Handler):
-            def emit(self, record):
-                try:
-                    level = logger.level(record.levelname).name
-                except ValueError:
-                    level = record.levelno
+    # -------------------------
+    # 1️⃣ Console → Loguru
+    # -------------------------
+    console_handler = LoguruHandler()
+    logger.addHandler(console_handler)
 
-                frame, depth = _logging.currentframe(), 2
-                while frame and frame.f_code.co_filename == _logging.__file__:
-                    frame = frame.f_back
-                    depth += 1
+    _loguru_logger.remove()  # 移除默认 handler
+    _loguru_logger.add(
+        _sys.stdout,
+        level=log_level,
+        colorize=True,
+        backtrace=False,
+        diagnose=False,
+        format=CUSTOM_CONSOLE_FORMAT if display_path is True else CUSTOM_CONSOLE_FORMAT_NOT_DISPLAY,  # 🔥 就是这一行
+    )
 
-                logger.opt(
-                    depth=depth,
-                    exception=record.exc_info
-                ).log(level, record.getMessage())
+    # === 日志文件名称 ===
+    LOG_FILE = _os.path.join(logs_dir, f"{file_name}_{_datetime.now().strftime('%Y%m%d')}.log")
 
-        # === 日志文件名称 ===
-        LOG_FILE = _os.path.join(logs_dir, f"{file_name}_{_datetime.now().strftime('%Y%m%d')}.log")
+    # ② file → logging（给系统 / 运维 / admin）
+    file_handler = _RotatingFileHandler(
+        LOG_FILE, maxBytes=DEFAULT_FILE_SIZE, backupCount=DEFAULT_BACKUP_FILE_COUNT, delay=True, encoding="utf-8"
+    )
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(UNIFIED_FORMATTER)
+    logger.addHandler(file_handler)
 
-        # === 移除默认 logger（防止重复输出）===
-        logger.remove()
+    # =========================
+    # 5️⃣ 三方库日志
+    # =========================
+    for name in ["asyncio", "urllib3", "requests", "charset_normalizer", "playwright", "root"]:
+        log = _logging.getLogger(name)
+        log.setLevel(log_level)  # 降低这些库的日志级别
+        if console_handler not in log.handlers:
+            log.addHandler(console_handler)
+        if file_handler and file_handler not in log.handlers:
+            log.addHandler(file_handler)
 
-        # === 控制台输出（带颜色）===
-
-        # logger.add(
-        #     sink=lambda msg: print(msg, end=""),
-        #     colorize=True,
-        #     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        #            "<level>{level: <8}</level> | "
-        #            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-        #            "<level>{message}</level>",
-        #     level=log_level
-        # )
-        logger.add(
-            _sys.stdout,
-            colorize=True,
-            level=log_level,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-                   "<level>{level: <8}</level> | "
-                   "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-                   "<level>{message}</level>",
-        )
-
-        # === 文件输出（按大小轮转、异步安全）===
-        logger.add(
-            LOG_FILE,
-            rotation="10 MB",  # 每个日志文件最大 10MB
-            retention="7 days",  # 保留 7 天日志
-            encoding="utf-8",
-            enqueue=True,  # 异步写入（支持 Playwright 异步爬虫）
-            backtrace=True,  # 打印错误堆栈
-            diagnose=True,  # 打印详细错误上下文
-            level=log_level,
-            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
-        )
-
-        # 4. ⭐⭐ logging → loguru（核心）
-        _logging.root.handlers = [InterceptHandler()]
-        _logging.root.setLevel(log_level)
-
-        # 5. 控制第三方库日志级别
-        for name in ["asyncio", "urllib3", "requests", "charset_normalizer", "playwright", "root"]:
-            _logging.getLogger(name).setLevel(log_level)
-
-        return logger
-    except (ImportError, Exception):
-        # 清除所有配置
-        _logging.root.handlers.clear()
-
-        LOG_FORMAT: str = '%(asctime)s - [PID-%(process)d] - [Thread-%(thread)d] - [%(levelname)s] - %(message)s'
-        # LOG_FORMAT: str = '%(asctime)s - [PID-%(process)d] - [Thread-%(thread)d] - [%(levelname)s] - %(message)s - <%(funcName)s> - [Line-%(lineno)d] - %(filename)s'
-        # DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
-
-        # 创建 handler
-        handler = _logging.StreamHandler(_sys.stdout)
-        handler.setFormatter(_logging.Formatter(LOG_FORMAT))
-
-        # 配置 root logger
-        _logging.root.setLevel(_logging.DEBUG)
-        _logging.root.addHandler(handler)
-
-        # 但需要为特定 logger 降低级别
-        for name in ["asyncio", "urllib3", "requests", "charset_normalizer", "playwright", "root"]:
-            log = _logging.getLogger(name)
-            log.setLevel(_logging.DEBUG)  # 降低这些库的日志级别
-            log.propagate = True  # 让他们传播到 root
-
-        # 获取 playwright logger
-        logger = _logging.getLogger("playwright")
-        logger.setLevel(_logging.DEBUG)
-        logger.propagate = True  # 传播到 root，使用 root 的格式
-        return logger
+    return logger
 
 
 logger = _executor_logger

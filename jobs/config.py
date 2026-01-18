@@ -21,7 +21,7 @@ qlv_user_login_state_expired_duration: int = 3600 * 24
 
 retry: int = 0
 timeout: float = 60
-last_minute_threshold: int = 30
+last_minute_threshold: int = 60
 semaphore: int = 10
 
 low_threshold: int = 10

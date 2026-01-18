@@ -1,18 +1,196 @@
 import os
 import sys
-import logging
+import json
+import aiofiles
 import importlib
 import threading
-from time import sleep
+from pyxxl import error
+from aiohttp import web
+from time import sleep, time
+from datetime import datetime
+from pyxxl.logger import LogBase
+from pyxxl.schema import RunData
 from threading import Lock, Timer
+from urllib.parse import parse_qs
+from pyxxl.types import LogRequest
+from pyxxl.executor import Executor
+from pyxxl.logger.disk import DiskLog
+from typing import Optional, TypedDict
 from watchdog.observers import Observer
+from log_utils import logger, get_log_file
+from pyxxl.server import routes, app_logger
 from pyxxl import ExecutorConfig, PyxxlRunner
 from watchdog.events import FileSystemEventHandler
-from log_tuils import setup_logger, get_log_dir, get_log_file
+
+_original_run_job = Executor.run_job
 
 jobs_path = "jobs"
 
-logger = logging.getLogger("root")
+# 移除原来的 /log
+routes._items = [
+    r for r in routes._items
+    if not (r.method == "POST" and r.path == "/log")
+]
+
+
+# 重新注册一个符合 XXL-Job Java Admin 解析规则的 /log
+@routes.post("/log")
+async def log(request: web.Request) -> web.Response:
+    """
+        {
+        "logDateTim":0,     // 本次调度日志时间
+        "logId":0,          // 本次调度日志ID
+        "fromLineNum":0     // 日志开始行号，滚动加载日志
+    }
+    """
+    data = await request.json()
+    app_logger(request).debug("get log request %s" % data)
+    task_log: LogBase = request.app["pyxxl_state"].task_log
+
+    return web.json_response({
+        "code": 200,
+        "msg": "日志获取成功",  # 🚨 关键：不能是 None，必须是 ""
+        "data": await task_log.get_logs(data),
+    })
+
+
+class LogResponse(TypedDict):
+    fromLineNum: int
+    toLineNum: int
+    logContent: str
+    isEnd: bool
+
+
+async def hacked_get_logs(self, request: LogRequest, *, key: Optional[str] = None) -> LogResponse:
+    # todo: 优化获取中间行的逻辑，缓存之前每行日志的大小然后直接seek
+    key = key or self.key(request["logId"])
+    logs = ""
+    from_line = request["fromLineNum"]
+    to_line_num = from_line - 1  # 👈 初始化为上一行
+    is_end = False
+
+    try:
+        async with aiofiles.open(key, mode="r") as f:
+            # 读取从第 1 行到 (from_line + tail - 1) 行
+            for i in range(1, from_line + self.log_tail_lines):
+                line = await f.readline()
+                if line == "":
+                    is_end = True
+                    break
+                if i >= from_line:
+                    to_line_num = i
+                    logs += line
+    except FileNotFoundError as e:
+        self.executor_logger.warning(str(e), exc_info=True)
+        logs = "No such logid logs."
+        is_end = True  # 文件不存在，也算“结束”
+    return LogResponse(
+        fromLineNum=request["fromLineNum"],
+        toLineNum=to_line_num,
+        logContent=logs,
+        isEnd=is_end,
+    )
+
+
+DiskLog.get_logs = hacked_get_logs
+
+
+def _get_mode(data: RunData):
+    """
+    从 executorParams 中解析 mode
+    支持:
+      mode=discard
+      mode=serial
+      {"mode":"discard"}   # 如果你用的是 JSON
+    """
+    params = data.executorParams or ""
+
+    # JSON 风格
+    if params.startswith("{") and params.endswith("}"):
+        try:
+            return json.loads(params).get("mode")
+        except (Exception,):
+            return None
+
+    # querystring 风格
+    qs = parse_qs(params)
+    return qs.get("mode", [None])[0]
+
+
+async def hacked_run_job(self, data: RunData):
+    handler_obj = self.handler.get(data.executorHandler)
+    if not handler_obj:
+        self.executor_logger.warning("handler %s not found." % data.executorHandler)
+        raise error.JobNotFoundError("handler %s not found." % data.executorHandler)
+
+    mode = _get_mode(data)
+    force_discard = (mode == "discard")
+
+    async with self.lock:
+        current_task = self.tasks.get(data.jobId)
+        queue = self.get_queue(data.jobId)
+
+        # 没有在跑 → 直接执行
+        if not current_task and queue.empty():
+            self.tasks[data.jobId] = self._create_task(data)
+            return "Running"
+
+        self.executor_logger.warning(
+            "jobId=%s handler=%s mode=%s running, strategy=%s",
+            data.jobId,
+            data.executorHandler,
+            mode,
+            data.executorBlockStrategy,
+        )
+
+        # 💣 Executor 级丢弃（Admin 以为是 SERIAL）
+        if force_discard:
+            self.executor_logger.warning(
+                f"[DISCARD_BY_PARAM] jobId={data.jobId} "
+                f"handler={data.executorHandler} "
+                f"logId={data.logId} params={data.executorParams}"
+            )
+
+            # 💡 关键：创建空日志文件
+            log_file_path = os.path.join(
+                self.config.log_local_dir,
+                f"pyxxl-{data.logId}.log"
+            )
+            # 确保目录存在
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+            # 生成日志内容
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_content = (
+                f"[{timestamp}] INFO - Task discarded by executor.\n"
+                f"[{timestamp}] INFO - Reason: Execution mode is 'discard'.\n"
+                f"[{timestamp}] INFO - Job ID: {data.jobId}, Log ID: {data.logId}\n"
+                f"[{timestamp}] INFO - Handler: {data.executorHandler}\n"
+                f"[{timestamp}] INFO - Parameters: {data.executorParams}\n"
+            )
+
+            # 创建空文件（异步）
+            async with aiofiles.open(log_file_path, "w") as f:
+                await f.write(log_content)
+
+            start_time = int(time() * 1000)
+            # 返回 200 给 admin
+            await self.xxl_client.callback(
+                data.logId,
+                start_time,
+                code=200,  # 200 = Admin 显示“执行成功”
+                # msg=msg,  # 👈 这个会显示在「执行备注」
+                msg=""  # 执行备注将什么都不显示。不要传 None，一定要是 ""（空字符串），否则 XXL-Job Java 端可能会写成 "null"。
+            )
+
+            return "DISCARDED"
+
+        # 否则：走 XXL 原始 SERIAL / COVER / DISCARD 逻辑
+        return await _original_run_job(self, data)
+
+
+# 🔥 打补丁
+Executor.run_job = hacked_run_job
 
 # ---------------------------------------------------
 # 1. 配置 Pyxxl 执行器（官方规范）
@@ -31,7 +209,7 @@ config = ExecutorConfig(
     # Default: "http://{executor_listen_host}:{executor_listen_port}"
 
     access_token=os.getenv("XXL_JOB_ACCESS_TOKEN", "Abc123456"),
-    executor_log_path=get_log_file("executor.log"),
+    executor_log_path=get_log_file(file_name="pyxxl.log"),
 
     # 建议开启 debug，便于定位注册成功与否
     debug=True,
@@ -96,10 +274,10 @@ def load_job_module(module_path):
 
         # 步骤3：清除导入缓存
         importlib.invalidate_caches()
-        logger.info(f"[pyxxl] 已清除导入缓存")
+        logger.info(f"已清除导入缓存")
 
         # 步骤4：重新导入模块
-        logger.info(f"[pyxxl] 重新导入模块: {module_path}")
+        logger.info(f"重新导入模块: {module_path}")
         module = importlib.import_module(module_path)
 
         # 步骤5：重新注册任务
@@ -119,12 +297,12 @@ def load_job_module(module_path):
                 else:
                     logger.warning(f"[pyxxl] 无法验证注册结果")
             else:
-                logger.error(f"[pyxxl] register 属性不可调用: {type(module.register)}")
+                logger.error(f"register 属性不可调用: {type(module.register)}")
         else:
-            logger.warning(f"[pyxxl] {module_path} 未定义 register(executor)，跳过")
+            logger.warning(f"{module_path} 未定义 register(executor)，跳过")
 
     except Exception as e:
-        logger.error(f"[pyxxl] 任务<{module_path}>注册失败，原因: {e}")
+        logger.error(f"任务<{module_path}>注册失败，原因: {e}")
 
 
 def inspect_pyxxl_structure():
@@ -158,14 +336,14 @@ def inspect_pyxxl_structure():
 # ---------------------------------------------------
 def auto_load_jobs():
     if not os.path.exists(jobs_path):
-        logger.warning("[pyxxl] jobs 目录不存在，跳过加载")
+        logger.warning("jobs 目录不存在，跳过加载")
         return
 
     # 先清空现有的处理器（避免重复注册错误）
     job_handler = executor.handler
     if hasattr(job_handler, '_handlers') and isinstance(job_handler._handlers, dict):
         job_handler._handlers.clear()
-        logger.info(f"[pyxxl] 已清空所有任务处理器")
+        logger.info(f"已清空所有任务处理器")
 
     for filename in os.listdir(jobs_path):
         if filename.endswith(".py") and filename != "__init__.py":
@@ -178,12 +356,12 @@ def auto_load_jobs():
 
                 if hasattr(module, "register"):
                     module.register(executor)
-                    logger.info(f"[pyxxl] 加载任务: {module_path}")
+                    logger.info(f"加载任务: {module_path}")
                 else:
-                    logger.warning(f"[pyxxl] {module_path} 未定义 register(executor)，跳过")
+                    logger.warning(f"{module_path} 未定义 register(executor)，跳过")
 
             except Exception as e:
-                logger.error(f"[pyxxl] 加载任务 {module_path} 失败: {e}")
+                logger.error(f"加载任务 {module_path} 失败: {e}")
 
 
 # ---------------------------------------------------
@@ -312,11 +490,13 @@ def watchdog_health_check():
 # 5. 启动 Pyxxl 执行器并启动监控
 # ---------------------------------------------------
 if __name__ == "__main__":
-    logger = setup_logger(
-        logs_dir=get_log_dir(), file_name="app", log_level=logging.DEBUG
-    )
+    # for logger_name in logging.root.manager.loggerDict:
+    #     logger = logging.getLogger(logger_name)
+    #     for handler in logger.handlers:
+    #         handler.setFormatter(xxl_log_common.TASK_FORMATTER)
+    #
     # 首先加载一次任务
-    logger.info("[pyxxl] 扫描并加载 jobs 目录中的任务...")
+    logger.info("扫描并加载 jobs 目录中的任务...")
     auto_load_jobs()
 
     # 启动 watchdog 监控文件变化的线程
@@ -331,7 +511,7 @@ if __name__ == "__main__":
     logger.info("文件监控线程已启动")
 
     # 启动执行器
-    logger.info("[pyxxl] 启动 XXL-JOB Python 执行器...")
+    logger.info("启动 XXL-JOB Python 执行器...")
     try:
         executor.run_executor()
 
@@ -342,9 +522,8 @@ if __name__ == "__main__":
         )
         health_check_thread.start()
     except KeyboardInterrupt:
-        logger.error("\n[pyxxl] 接收到中断信号，正在关闭...")
+        logger.error("接收到中断信号，正在关闭...")
     except Exception as e:
-        logger.error(f"[pyxxl] 执行器异常: {e}")
+        logger.error(f"执行器异常: {e}")
     finally:
-        logger.error("[pyxxl] 执行器已关闭")
-
+        logger.error("执行器已关闭")

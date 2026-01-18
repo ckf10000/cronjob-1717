@@ -16,7 +16,6 @@ import jobs.config as config
 from aiohttp import CookieJar
 from typing import Dict, Any, Optional
 from playwright_stealth import Stealth
-from log_tuils import get_screenshot_dir
 from qlv_helper.po.login_page import LoginPage
 from playwright.async_api import async_playwright
 from playwright_helper.libs.executor import RunResult
@@ -25,6 +24,7 @@ from qlv_helper.controller.user_login import username_login
 from qlv_helper.controller.wechat_login import wechat_login
 from jobs.common import get_browser_pool, get_playwright_executor
 from qlv_helper.controller.main_page import get_main_info_with_http
+from log_utils import setup_logger, get_screenshot_dir, get_log_dir
 from jobs.redis_utils import redis_client_0, redis_client_1, gen_qlv_login_state_key
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from qlv_helper.utils.stealth_browser import CHROME_STEALTH_ARGS, IGNORE_ARGS, USER_AGENT, viewport, setup_stealth_page
@@ -200,7 +200,6 @@ def register(executor):
 
 if __name__ == '__main__':
     from logging import INFO
-    from log_tuils import setup_logger, get_log_dir
 
     logger = setup_logger(
         logs_dir=get_log_dir(), file_name="update_qlv_login_state", log_level=INFO

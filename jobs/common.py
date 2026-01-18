@@ -13,7 +13,7 @@ import platform
 import jobs.config as config
 from datetime import datetime
 from urllib.parse import quote
-from log_tuils import get_screenshot_dir
+from log_utils import get_screenshot_dir
 from typing import Literal, Optional, Dict
 from playwright_helper.middlewares.stealth import *
 from playwright_helper.libs.browser_pool import BrowserPool

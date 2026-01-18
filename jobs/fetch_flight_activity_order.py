@@ -148,7 +148,7 @@ def register(executor):
 
 if __name__ == '__main__':
     from logging import INFO
-    from log_tuils import setup_logger, get_log_dir
+    from log_utils import setup_logger, get_log_dir
 
     logger = setup_logger(
         logs_dir=get_log_dir(), file_name="fetch_flight_activity_order", log_level=INFO

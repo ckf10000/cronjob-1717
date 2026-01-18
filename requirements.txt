@@ -4,11 +4,13 @@ aiohttp==3.13.2
 watchdog==6.0.0
 ddddocr==1.5.6
 requests==2.32.5
+aiofiles==25.1.0
 python_ceair_helper>=0.2.4
 python_http_helper>=0.2.1
-python_playwright_helper>=0.3.7
+python_playwright_helper>=0.4.3
 python_ocr_helper>=0.0.2
-python_qlv_helper>=0.6.4
-python_redis_helper>=0.0.7
+python_qlv_helper>=0.8.5
+python_redis_helper>=0.1.1
 python_xxl_job_helper>=0.1.4
-python_qdairlines_helper>=0.0.8
+python_qdairlines_helper>=0.5.7
+flight_helper>=0.3.4

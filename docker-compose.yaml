@@ -1,6 +1,6 @@
 services:
   playwright-cronjob-executor-1717:
-    image: playwright_cronjob_executor_1717:1.0.0
+    image: playwright_cronjob_executor_1717:2.0.0
     container_name: playwright-cronjob-executor-1717
     ports:
       - "9996:9996"

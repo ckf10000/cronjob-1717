@@ -65,8 +65,12 @@ async def executor_fetch_flight_activity_order_task(
                         logger.error(f"获取订单：{order_id}详情失败：{ex}")
                         return dict(code=-1, message=str(ex), data=None)
 
+        activity_order_set = await activity_order_queue.get_all_pending()
+        order_state_set = await order_state_queue.get_all_pending()
         is_not_fetch: Dict[int, Any] = dict()
         domestic_activity_orders_dict: Dict[int, Any] = dict()
+        fetch_order_dict: Dict[str, int] = dict()
+        logger.info(f"当前国内活动订单列表中一共有<{len(domestic_activity_orders)}>条数据")
         for domestic_activity_order in domestic_activity_orders:
             order_id = domestic_activity_order.get("id")
             if order_id:
@@ -75,31 +79,67 @@ async def executor_fetch_flight_activity_order_task(
                     dep_date=domestic_activity_order.get("dat_dep"), extend=order_id,
                     cabin=domestic_activity_order.get("cabin"), flight_no=domestic_activity_order.get("flight_no"),
                 )
-                if await activity_order_queue.exists(task=key) is False:
+                fetch_order_dict[key] = order_id
+                if key not in activity_order_set:
                     is_not_fetch[order_id] = key
                 domestic_activity_orders_dict[order_id] = domestic_activity_order
+
+        # 需要插入活动订单集合的订单
+        # need_insert = fetch_order_set.difference(activity_order_set)
+        # need_insert = set(is_not_fetch.values())
+        # 需要从活动订单集合删除的订单
+        need_delete_1 = activity_order_set.difference(set(fetch_order_dict.keys()))
+        need_delete_1_count = len(need_delete_1)
+        if need_delete_1_count > 0:
+            logger.info(f"有<{need_delete_1_count}>条数据需要从活动订单集合中删除")
+        flag = False
+        for key in need_delete_1:
+            if flag is False:
+                flag = True
+            await activity_order_queue.finish(task=key)
+            logger.info(f"活动订单集合中的元素：{key} 已经被移除集合")
+            order_id = fetch_order_dict.get(key)
+            if order_id:
+                cache_data = await redis_client_0.get(key)
+                if cache_data:
+                    await redis_client_0.expire(key=key, expire=1)
+                    logger.info(f"订单<{order_id}>，详情数据在Redis缓存中已被清除")
+        # 需要从状态订单集合删除的订单
+        need_delete_2 = order_state_set.difference(set(fetch_order_dict.keys()))
+        need_delete_2_count = len(need_delete_2)
+        if need_delete_2_count > 0:
+            logger.info(f"有<{need_delete_2_count}>条数据需要从状态订单集合中删除")
+        for key in need_delete_2:
+            if flag is False:
+                flag = True
+            await order_state_queue.finish(task=key)
+            logger.info(f"状态订单集合中的元素：{key} 已经被移除集合")
+            order_id = fetch_order_dict.get(key)
+            if order_id:
+                cache_data = await redis_client_0.get(key)
+                if cache_data:
+                    await redis_client_0.expire(key=key, expire=1)
+                    logger.info(f"订单<{order_id}>，详情数据在Redis缓存中已被清除")
 
         # 创建任务
         tasks = [asyncio.create_task(fetch_detail(order_id=order_id)) for order_id in is_not_fetch.keys()]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        flag = False
         for result in results:
             if isinstance(result, dict) and result.get("code") == 200 and "订单出票查看" in result.get("message"):
+                if flag is False:
+                    flag = True
                 order_data = result.get("data")
                 order_id = order_data.get("id")
                 key = is_not_fetch.get(order_id)
                 activity_order = domestic_activity_orders_dict.get(order_id)
                 remaining_time = activity_order.get("remaining_time")
-                cache_data = await redis_client_0.get(key)
-                if cache_data:
-                    continue
-                else:
-                    if flag is False:
-                        flag = True
-                    activity_order.update(order_data)
-                    await redis_client_0.set(key=key, value=activity_order, ex=remaining_time)
-                    await activity_order_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 activity 队列
-                    await order_state_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 order 队列
+                activity_order.update(order_data)
+                await redis_client_0.set(key=key, value=activity_order, ex=remaining_time)
+                logger.info(f"订单<{order_id}>，详情数据已添加到Redis缓存")
+                await activity_order_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 activity 队列
+                logger.info(f"订单<{order_id}>，已更新到活动订单集合中")
+                await order_state_queue.lpush_if_not_exists(task=key)  # 原本是 LPUSH 到 order 队列
+                logger.info(f"订单<{order_id}>，已更新到状态订单集合中")
         if flag is True:
             msg: str = "任务执行成功"
             logger.info(msg)

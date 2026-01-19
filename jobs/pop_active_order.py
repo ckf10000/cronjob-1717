@@ -13,11 +13,12 @@ import json
 import asyncio
 from logging import Logger
 import jobs.config as config
+from aiohttp import CookieJar
 from typing import Any, Optional
-from playwright_helper.utils.type_utils import RunResult
-from jobs.common import get_browser_pool, get_playwright_executor
+from datetime import datetime, timedelta
 from jobs.redis_utils import redis_client_0, gen_qlv_login_state_key
-from qlv_helper.controller.order_table import pop_will_expire_domestic_activity_order
+from qlv_helper.controller.order_table import get_domestic_activity_order_table
+from qlv_helper.controller.order_detail import kick_out_activity_orders_with_http
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 
@@ -28,29 +29,40 @@ async def executor_pop_actvite_order_task(
     playwright_state = await redis_client_0.get(key=gen_qlv_login_state_key(user_id=qlv_user_id))
     if not playwright_state:
         raise RuntimeError("Redis中劲旅登录状态数据已过期")
-    pool = get_browser_pool(logger=logger)
-
-    executor = get_playwright_executor(logger=logger, retry=retry, pool=pool)
-    await executor.start()
-
-    result: RunResult = await executor.run(
-        callback=pop_will_expire_domestic_activity_order, storage_state=playwright_state, qlv_protocol=qlv_protocol,
-        qlv_domain=qlv_domain, timeout=timeout, last_minute_threshold=last_minute_threshold
+    # -------------------------
+    # 获取订单列表（非并发）
+    # -------------------------
+    table_response = await get_domestic_activity_order_table(
+        domain=qlv_domain, protocol=qlv_protocol, retry=retry, timeout=int(timeout), enable_log=True,
+        cookie_jar=CookieJar(), playwright_state=playwright_state
     )
-    # 进程退出时关闭
-    await pool.stop()
-    await executor.stop()
-
-    if result.success is True:
-        data_list, is_pop = result.result
-        if is_pop is True:
-            msg: str = "任务执行成功"
-            logger.info(msg)
-            return msg
-        else:
-            logger.warning("任务执行结束，本次任务没有执行任何有效数据")
-    else:
-        raise result.error
+    pagination_data = table_response.get("data") or dict()
+    domestic_activity_orders = pagination_data.get("data")
+    logger.info(f"当前国内活动订单列表中一共有<{len(domestic_activity_orders)}>条数据")
+    # 如果没有订单
+    if domestic_activity_orders:
+        need_kick_out_orders = list()
+        for domestic_activity_order in domestic_activity_orders:
+            order_id = domestic_activity_order.get("id")
+            last_time_ticket = domestic_activity_order.get("last_time_ticket")
+            if isinstance(last_time_ticket, str) and datetime.strptime(
+                    last_time_ticket, "%Y-%m-%d %H:%M:%S"
+            ) < datetime.now() + timedelta(minutes=last_minute_threshold):
+                need_kick_out_orders.append(order_id)
+        if need_kick_out_orders:
+            order_str = ",".join(str(id) for id in need_kick_out_orders)
+            logger.info(f"订单<{order_str}>，将要从国内活动订单列表剔出")
+            response = await kick_out_activity_orders_with_http(
+                order_ids=need_kick_out_orders, domain=qlv_domain, protocol=qlv_protocol, retry=retry,
+                timeout=int(timeout), enable_log=True, cookie_jar=CookieJar(), playwright_state=playwright_state
+            )
+            if "成功" in response.get("data"):
+                msg: str = f"任务执行成功，订单<{order_str}>，已从国内活动订单列表剔出"
+                logger.info(msg)
+                return msg
+            else:
+                raise RuntimeError(f"订单<{order_str}>，剔出国内活动订单列表失败，原因：{response}")
+    logger.warning("任务执行结束，本次任务没有执行任何有效数据")
 
 
 async def pop_actvite_order_local_executor(
@@ -82,14 +94,18 @@ def register(executor):
         ) else json.loads(g.xxl_run_data.executorParams)
         g.logger.info(
             f"[pop_actvite_order] running with executor params: %s" % executor_params)
-        return await executor_pop_actvite_order_task(
-            logger=g.logger, qlv_domain=executor_params.get("qlv_domain") or config.qlv_domain,
-            qlv_protocol=executor_params.get("qlv_protocol") or config.qlv_protocol,
-            last_minute_threshold=executor_params.get("last_minute_threshold") or config.last_minute_threshold,
-            timeout=executor_params.get("timeout") or config.timeout,
-            qlv_user_id=executor_params.get("qlv_user_id") or config.qlv_user_id,
-            retry=executor_params.get("retry") or config.retry,
-        )
+        try:
+            return await executor_pop_actvite_order_task(
+                logger=g.logger, qlv_domain=executor_params.get("qlv_domain") or config.qlv_domain,
+                qlv_protocol=executor_params.get("qlv_protocol") or config.qlv_protocol,
+                last_minute_threshold=executor_params.get("last_minute_threshold") or config.last_minute_threshold,
+                timeout=executor_params.get("timeout") or config.timeout,
+                qlv_user_id=executor_params.get("qlv_user_id") or config.qlv_user_id,
+                retry=executor_params.get("retry") or config.retry,
+            )
+        except Exception as e:
+            g.logger.error(e)
+            raise e from e
 
 
 if __name__ == '__main__':

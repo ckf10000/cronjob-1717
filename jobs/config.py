@@ -13,8 +13,8 @@ from typing import List, Dict, Any
 
 qlv_protocol: str = "https"
 qlv_domain: str = "pekzhongqihl.qlv88.com"
-qlv_user_id: str = "周汗林"
-qlv_user_password: str = "pass@123aA"
+qlv_user_id: str = "机器人出票"
+qlv_user_password: str = "pass@123cC"
 login_attempt: int = 100
 discard_state: List[str] = ["出票完成", "出票成功", "已作废"]
 qlv_user_login_state_expired_duration: int = 3600 * 24

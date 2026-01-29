@@ -191,14 +191,21 @@ def hacked_setup_logging(path: str, name: str, level: int = _logging.INFO) -> _l
     # =========================
     # 5️⃣ 三方库日志
     # =========================
-    for name in ["asyncio", "urllib3", "requests", "charset_normalizer", "playwright", "root"]:
+    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access"]:
         log = _logging.getLogger(name)
         log.setLevel(level)  # 降低这些库的日志级别
-        if console_handler not in log.handlers:
+        if not any(isinstance(h, LoguruHandler) for h in log.handlers):
             log.addHandler(console_handler)
-        if file_handler and file_handler not in log.handlers:
-            log.addHandler(file_handler)
 
+        if file_handler and not any(isinstance(h, _RotatingFileHandler) for h in log.handlers):
+            log.addHandler(file_handler)
+        log.propagate = False
+    # access_logger = _logging.getLogger("aiohttp.access")
+    # access_logger.setLevel(level)
+    # access_logger.propagate = False  # 防止再传给 root
+    # 只加一次 handler（防重复）
+    # if not any(isinstance(h, LoguruHandler) for h in access_logger.handlers):
+    #     access_logger.addHandler(console_handler)
     return logger
 
 
@@ -271,13 +278,15 @@ def setup_logger(
     # =========================
     # 5️⃣ 三方库日志
     # =========================
-    for name in ["asyncio", "urllib3", "requests", "charset_normalizer", "playwright", "root"]:
+    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access"]:
         log = _logging.getLogger(name)
         log.setLevel(log_level)  # 降低这些库的日志级别
-        if console_handler not in log.handlers:
+        if not any(isinstance(h, LoguruHandler) for h in log.handlers):
             log.addHandler(console_handler)
-        if file_handler and file_handler not in log.handlers:
+
+        if file_handler and not any(isinstance(h, _RotatingFileHandler) for h in log.handlers):
             log.addHandler(file_handler)
+        log.propagate = False
 
     return logger
 

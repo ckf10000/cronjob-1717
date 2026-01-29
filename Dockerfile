@@ -39,6 +39,7 @@ COPY --from=build ${LOCAL_PKG} ${LOCAL_PKG}
 COPY --from=build $WORKDIR $WORKDIR
 
 # 安装运行所需的系统库
+RUN apt-get update && apt-get install -y curl wget
 RUN ln -sf ${LOCAL_PKG}/bin/* /usr/local/bin/
 
 
@@ -49,7 +50,13 @@ EXPOSE 9996
 ###############################################################################
 #                                   启动服务
 ###############################################################################
-
-# 启动 服务
 ENTRYPOINT ["python"]
 CMD ["app.py"]
+
+###############################################################################
+#                                健康检查
+###############################################################################
+
+# 健康检查，每隔30秒检查一次，超时5秒，连续失败3次则标记为不健康
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --spider -q http://127.0.0.1:9996/healthCheck || exit 1

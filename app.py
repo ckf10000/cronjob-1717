@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import json
@@ -52,6 +53,11 @@ async def log(request: web.Request) -> web.Response:
         "msg": "日志获取成功",  # 🚨 关键：不能是 None，必须是 ""
         "data": await task_log.get_logs(data),
     })
+
+
+@routes.get("/healthCheck")
+async def health_check(request: web.Request) -> web.Response:
+    return web.json_response({"code": 200, "msg": "当前系统状态良好", "data": None})
 
 
 class LogResponse(TypedDict):

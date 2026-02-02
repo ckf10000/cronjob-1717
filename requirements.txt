@@ -6,12 +6,13 @@ watchdog==6.0.0
 ddddocr==1.5.6
 requests==2.32.5
 aiofiles==25.1.0
+############## 业务包 ###############
 python_ceair_helper>=0.2.5
-python_http_helper>=0.2.3
+python_http_helper>=0.2.4
 python_playwright_helper>=0.4.5
 python_ocr_helper>=0.0.3
 python_qlv_helper>=0.9.6
 python_redis_helper>=0.1.5
 python_xxl_job_helper>=0.1.4
 python_qdairlines_helper>=0.7.1
-flight_helper>=0.4.7
+flight_helper>=0.4.9

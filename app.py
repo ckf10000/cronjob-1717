@@ -239,28 +239,28 @@ def load_job_module(module_path):
             handlers_dict = job_handler._handlers
 
             if isinstance(handlers_dict, dict):
-                logger.info(f"[pyxxl] 当前注册的任务数量: {len(handlers_dict)}")
+                logger.info(f"当前注册的任务数量: {len(handlers_dict)}")
 
                 if module_name in handlers_dict:
                     # 保存旧处理器信息（用于调试）
                     old_handler = handlers_dict[module_name]
-                    logger.info(f"[pyxxl] 旧处理器信息: {type(old_handler)}")
+                    logger.info(f"旧处理器信息: {type(old_handler)}")
 
                     # 取消注册
                     del handlers_dict[module_name]
-                    logger.info(f"[pyxxl] ✓ 已取消注册任务: {module_name}")
+                    logger.info(f"✓ 已取消注册任务: {module_name}")
 
                     # 验证取消注册
                     if module_name not in handlers_dict:
-                        logger.info(f"[pyxxl] ✓ 取消注册验证成功")
+                        logger.info(f"✓ 取消注册验证成功")
                     else:
-                        logger.error(f"[pyxxl] ✗ 取消注册验证失败")
+                        logger.error(f"✗ 取消注册验证失败")
                 else:
-                    logger.info(f"[pyxxl] 任务 {module_name} 未注册，直接进行新注册")
+                    logger.info(f"任务 {module_name} 未注册，直接进行新注册")
             else:
-                logger.warning(f"[pyxxl] _handlers 不是字典: {type(handlers_dict)}")
+                logger.warning(f"_handlers 不是字典: {type(handlers_dict)}")
         else:
-            logger.warning(f"[pyxxl] 无法找到任务字典，跳过取消注册步骤")
+            logger.warning(f"无法找到任务字典，跳过取消注册步骤")
 
         # 步骤2：卸载模块
         if module_path in sys.modules:
@@ -271,12 +271,12 @@ def load_job_module(module_path):
             if hasattr(old_module, '__pyxxl_cleanup__'):
                 try:
                     old_module.__pyxxl_cleanup__()
-                    logger.info(f"[pyxxl] 执行模块清理函数")
+                    logger.info(f"执行模块清理函数")
                 except Exception as e:
-                    logger.warning(f"[pyxxl] 模块清理失败: {e}")
+                    logger.warning(f"模块清理失败: {e}")
 
             del sys.modules[module_path]
-            logger.info(f"[pyxxl] ✓ 已卸载模块: {module_path}")
+            logger.info(f"✓ 已卸载模块: {module_path}")
 
         # 步骤3：清除导入缓存
         importlib.invalidate_caches()
@@ -291,17 +291,17 @@ def load_job_module(module_path):
             # 检查注册函数是否可调用
             if callable(module.register):
                 module.register(executor)
-                logger.info(f"[pyxxl] ✓ 成功调用 register 函数")
+                logger.info(f"✓ 成功调用 register 函数")
 
                 # 步骤6：验证注册结果
                 if hasattr(job_handler, '_handlers') and isinstance(job_handler._handlers, dict):
                     if module_name in job_handler._handlers:
                         new_handler = job_handler._handlers[module_name]
-                        logger.info(f"[pyxxl] ✓ 任务注册成功，新处理器: {type(new_handler)}")
+                        logger.info(f"✓ 任务注册成功，新处理器: {type(new_handler)}")
                     else:
-                        logger.error(f"[pyxxl] ✗ 任务注册失败，任务未出现在处理器字典中")
+                        logger.error(f"✗ 任务注册失败，任务未出现在处理器字典中")
                 else:
-                    logger.warning(f"[pyxxl] 无法验证注册结果")
+                    logger.warning(f"无法验证注册结果")
             else:
                 logger.error(f"register 属性不可调用: {type(module.register)}")
         else:
@@ -332,7 +332,7 @@ def inspect_pyxxl_structure():
             if isinstance(value, dict):
                 logger.info(f"字典属性 '{attr}': 包含 {len(value)} 个键")
                 if value:
-                    logger.info(f"  前几个键: {list(value.keys())[:3]}")
+                    logger.info(f"前几个键: {list(value.keys())[:3]}")
         except (Exception,):
             pass
 
@@ -379,91 +379,91 @@ class DebouncedJobFileEventHandler(FileSystemEventHandler):
         self._timer = None
         self._lock = Lock()
         self._pending_events = set()
-        logger.info(f"[watchdog] 防抖事件处理器已初始化，防抖时间: {delay}秒")
+        logger.info(f"防抖事件处理器已初始化，防抖时间: {delay}秒")
 
     def on_any_event(self, event):
         """监控所有事件，用于调试"""
         if not event.is_directory:
-            logger.info(f"[watchdog] 捕获事件: {event.event_type} - {event.src_path}")
+            logger.info(f"捕获事件: {event.event_type} - {event.src_path}")
 
     def _process_events(self):
-        logger.info(f"[watchdog] 开始处理积压的事件")
+        logger.info(f"开始处理积压的事件")
         with self._lock:
             events = self._pending_events.copy()
             self._pending_events.clear()
             self._timer = None
 
-        logger.info(f"[watchdog] 需要处理 {len(events)} 个事件")
+        logger.info(f"需要处理 {len(events)} 个事件")
         for event_path in events:
             self._handle_single_event(event_path)
 
     @staticmethod
     def _handle_single_event(event_path):
-        logger.info(f"[watchdog] 处理单个事件: {event_path}")
+        logger.info(f"处理单个事件: {event_path}")
         if event_path.endswith(".py") and not event_path.endswith("__init__.py"):
             if os.path.exists(event_path):
-                logger.info(f"[watchdog] 重新加载模块: {event_path}")
+                logger.info(f"重新加载模块: {event_path}")
                 module_name = os.path.basename(event_path)[:-3]
                 module_path = f"{jobs_path}.{module_name}"
 
                 # 卸载模块
                 if module_path in sys.modules:
                     del sys.modules[module_path]
-                    logger.info(f"[watchdog] 已卸载模块: {module_path}")
+                    logger.info(f"已卸载模块: {module_path}")
 
                 # 重新加载
                 try:
                     load_job_module(module_path)
                 except Exception as e:
-                    logger.warning(f"[watchdog] 重新加载失败: {e}")
+                    logger.warning(f"重新加载失败: {e}")
             else:
-                logger.error(f"[watchdog] 文件不存在，跳过: {event_path}")
+                logger.error(f"文件不存在，跳过: {event_path}")
 
     def _schedule_processing(self, event_path):
-        logger.info(f"[watchdog] 调度处理: {event_path}")
+        logger.info(f"调度处理: {event_path}")
         with self._lock:
             self._pending_events.add(event_path)
 
             if self._timer is not None:
                 self._timer.cancel()
-                logger.info(f"[watchdog] 取消之前的定时器")
+                logger.info(f"取消之前的定时器")
 
             self._timer = Timer(self.delay, self._process_events)
             self._timer.start()
-            logger.info(f"[watchdog] 新定时器已启动，将在 {self.delay} 秒后处理")
+            logger.info(f"新定时器已启动，将在 {self.delay} 秒后处理")
 
     def on_modified(self, event):
-        logger.info(f"[watchdog] 文件修改事件: {event.src_path}")
+        logger.info(f"文件修改事件: {event.src_path}")
         if not event.is_directory and event.src_path.endswith(".py") and not event.src_path.endswith("__init__.py"):
-            logger.info(f"[watchdog] 检测到Python文件修改: {event.src_path}")
+            logger.info(f"检测到Python文件修改: {event.src_path}")
             self._schedule_processing(event.src_path)
 
     def on_created(self, event):
-        logger.info(f"[watchdog] 文件创建事件: {event.src_path}")
+        logger.info(f"文件创建事件: {event.src_path}")
         if not event.is_directory and event.src_path.endswith(".py") and not event.src_path.endswith("__init__.py"):
-            logger.info(f"[watchdog] 检测到新Python文件: {event.src_path}")
+            logger.info(f"检测到新Python文件: {event.src_path}")
             self._schedule_processing(event.src_path)
 
     def on_deleted(self, event):
         if not event.is_directory:
-            logger.info(f"[watchdog] 文件已删除: {event.src_path}")
+            logger.info(f"文件已删除: {event.src_path}")
             module_name = os.path.basename(event.src_path)[:-3]
             module_path = f"jobs.{module_name}"
 
             if module_path in sys.modules:
                 del sys.modules[module_path]
-                logger.info(f"[watchdog] 模块 {module_name} 已卸载")
+                logger.info(f"模块 {module_name} 已卸载")
 
 
 def start_job_watchdog():
-    logger.info(f"[watchdog] 初始化文件监控...")
+    logger.info(f"初始化文件监控...")
 
     # 检查监控目录是否存在
     if not os.path.exists(jobs_path):
-        logger.warning(f"[watchdog] 警告: 监控目录 {jobs_path} 不存在!")
+        logger.warning(f"警告: 监控目录 {jobs_path} 不存在!")
         return
 
-    logger.info(f"[watchdog] 监控目录: {os.path.abspath(jobs_path)}")
+    logger.info(f"监控目录: {os.path.abspath(jobs_path)}")
 
     event_handler = DebouncedJobFileEventHandler(delay=3.0)  # 3秒防抖
     observer = Observer()
@@ -471,16 +471,16 @@ def start_job_watchdog():
     try:
         observer.schedule(event_handler, jobs_path, recursive=False)
         observer.start()
-        logger.info(f"[watchdog] 开始监控 {jobs_path} 目录变化...")
+        logger.info(f"开始监控 {jobs_path} 目录变化...")
 
         # 持续运行监控
         while observer.is_alive():
             sleep(1)
 
     except Exception as e:
-        logger.error(f"[watchdog] 监控异常: {e}")
+        logger.error(f"监控异常: {e}")
     finally:
-        logger.error("[watchdog] 停止文件监控...")
+        logger.error("停止文件监控...")
         observer.stop()
         observer.join()
 

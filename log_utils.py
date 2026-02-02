@@ -191,7 +191,7 @@ def hacked_setup_logging(path: str, name: str, level: int = _logging.INFO) -> _l
     # =========================
     # 5️⃣ 三方库日志
     # =========================
-    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access"]:
+    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access", "watchdog"]:
         log = _logging.getLogger(name)
         log.setLevel(level)  # 降低这些库的日志级别
         if not any(isinstance(h, LoguruHandler) for h in log.handlers):
@@ -278,7 +278,7 @@ def setup_logger(
     # =========================
     # 5️⃣ 三方库日志
     # =========================
-    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access"]:
+    for name in ["urllib3", "requests", "charset_normalizer", "playwright", "asyncio", "aiohttp.access", "watchdog"]:
         log = _logging.getLogger(name)
         log.setLevel(log_level)  # 降低这些库的日志级别
         if not any(isinstance(h, LoguruHandler) for h in log.handlers):
